@@ -575,7 +575,13 @@ function renderTeacherHw(app){
     if(mySubjects.indexOf(ses.subject) < 0) return;
     sessions.push(Object.assign({id:sid}, ses));
   });
-  sessions.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  // 진행중(인증가능/예정) 먼저, 마감/종료된 건 아래로. 그 안에서는 최신순
+  sessions.sort(function(a,b){
+    var ca = (hwState(a)==='closed') ? 1 : 0;
+    var cb = (hwState(b)==='closed') ? 1 : 0;
+    if(ca !== cb) return ca - cb;
+    return b.date.localeCompare(a.date);
+  });
 
   var html = '<div class="section-title">숙제 인증</div>';
   if(!mySubjects.length){
@@ -903,10 +909,14 @@ function renderAdminHome(app){
   var groupList = Object.keys(groups).map(function(gid){
     var arr = groups[gid];
     arr.sort(function(a,b){ return (a.round||0)-(b.round||0) || a.date.localeCompare(b.date); });
-    return {gid:gid, sessions:arr};
+    var ended = arr.some(function(s){ return s.ended; });
+    return {gid:gid, sessions:arr, ended:ended};
   });
-  // 그룹은 첫 회차 날짜 최신순
-  groupList.sort(function(a,b){ return b.sessions[0].date.localeCompare(a.sessions[0].date); });
+  // 진행 중 먼저(최신순), 종료된 건 맨 아래로
+  groupList.sort(function(a,b){
+    if(a.ended !== b.ended) return a.ended ? 1 : -1;
+    return b.sessions[0].date.localeCompare(a.sessions[0].date);
+  });
 
   var html = '<button class="btn" onclick="openSessionModal()" style="margin-bottom:14px;">+ 스터디 개설</button>';
   html += '<div class="section-title">개설된 스터디</div>';
@@ -916,10 +926,16 @@ function renderAdminHome(app){
   }
   html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">스터디를 누르면 회차별 현황이 펼쳐집니다</div>';
 
+  var endedDividerShown = false;
   groupList.forEach(function(g, gi){
     var first = g.sessions[0];
+    var groupEnded = g.ended;
+    // 종료된 스터디 시작 지점에 구분선 1회 삽입
+    if(groupEnded && !endedDividerShown){
+      endedDividerShown = true;
+      html += '<div class="section-title" style="margin-top:22px;color:var(--muted);">종료된 스터디</div>';
+    }
     var total = g.sessions.length;
-    var groupEnded = g.sessions.some(function(s){ return s.ended; });
     // 그룹 전체 누적 출석/숙제 인원 (회차 합산)
     var rowId = 'admin-group-'+gi;
     // 시작/끝 날짜
@@ -1136,17 +1152,27 @@ function renderAdminStatus(app){
   var groupList = Object.keys(groups).map(function(gid){
     var arr = groups[gid];
     arr.sort(function(a,b){ return (a.round||0)-(b.round||0) || a.date.localeCompare(b.date); });
-    return {gid:gid, sessions:arr};
+    var ended = arr.some(function(s){ return s.ended; });
+    return {gid:gid, sessions:arr, ended:ended};
   });
-  groupList.sort(function(a,b){ return b.sessions[0].date.localeCompare(a.sessions[0].date); });
+  groupList.sort(function(a,b){
+    if(a.ended !== b.ended) return a.ended ? 1 : -1;
+    return b.sessions[0].date.localeCompare(a.sessions[0].date);
+  });
 
   var html = '<div class="section-title">스터디별 참여 현황</div>';
   if(!groupList.length){ html += '<div class="empty">개설된 스터디가 없습니다</div>'; app.innerHTML=html; return; }
   html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">스터디를 누르면 회차별 현황이 펼쳐집니다</div>';
 
+  var endedDividerShown = false;
   groupList.forEach(function(g, gi){
     var first = g.sessions[0];
     var rowId = 'status-group-'+gi;
+    if(g.ended && !endedDividerShown){
+      endedDividerShown = true;
+      html += '<div class="section-title" style="margin-top:22px;color:var(--muted);">종료된 스터디</div>';
+    }
+    var endedBadge = g.ended ? '<span class="badge-time closed" style="margin-left:6px;">종료됨</span>' : '';
     // 신청자
     var enrolledNames = [];
     Object.keys(DATA.enrollments).forEach(function(k){
@@ -1154,7 +1180,7 @@ function renderAdminStatus(app){
     });
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+first.subject+'</span>'+
+    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div class="title" style="font-size:14px;margin-top:2px;">'+(first.title||first.subject)+'</div>';
     html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · 신청 '+enrolledNames.length+'명</div>';
