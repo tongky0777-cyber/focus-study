@@ -319,7 +319,8 @@ function showView(id){
   document.querySelectorAll('.tabbar .tab').forEach(function(t){ t.classList.remove('on'); });
   var tabEl = document.getElementById('tab-'+id);
   if(tabEl) tabEl.classList.add('on');
-  renderView(id);
+  // 탭 전환 시 최신 데이터를 불러와 반영 (삭제/종료/신규 즉시 반영)
+  loadAll(function(){ renderView(id); });
 }
 
 // ===== 헬퍼: 차감 계산 =====
@@ -378,6 +379,7 @@ function hwWindow(ses){
 
 // 출석 상태: 'before'|'open'|'closed'
 function attendState(ses){
+  if(ses.ended) return 'closed';
   var now = new Date(), w = attendWindow(ses);
   if(now < w.start) return 'before';
   if(now > w.end) return 'closed';
@@ -385,6 +387,7 @@ function attendState(ses){
 }
 // 숙제 상태: 'before'|'open'|'closed'
 function hwState(ses){
+  if(ses.ended) return 'closed';
   var now = new Date(), w = hwWindow(ses);
   if(now < w.start) return 'before';
   if(now > w.end) return 'closed';
@@ -394,6 +397,7 @@ function hwState(ses){
 function isSessionClosed(ses){ return hwState(ses) === 'closed'; }
 // 전체적으로 '진행 관련' 인지 (목록 노출용): 숙제 마감 안 지났으면 진행/예정
 function sessionTimeState(ses){
+  if(ses.ended) return 'closed';
   var now = new Date();
   var hw = hwWindow(ses);
   if(now > hw.end) return 'closed';
@@ -600,9 +604,10 @@ function renderTeacherHw(app){
     } else if(state==='before'){
       btn = '<button class="act-btn disabled" disabled>'+HW_START+' 부터 가능</button>';
     } else {
-      btn = '<button class="act-btn disabled" disabled>숙제 마감</button>';
+      btn = '<button class="act-btn disabled" disabled>'+(ses.ended?'스터디 종료':'숙제 마감')+'</button>';
     }
-    var badge = state==='open' ? '<span class="badge-time open">인증 가능</span>'
+    var badge = ses.ended ? '<span class="badge-time closed">종료됨</span>'
+              : state==='open' ? '<span class="badge-time open">인증 가능</span>'
               : state==='before' ? '<span class="badge-time before">예정</span>'
               : '<span class="badge-time closed">마감</span>';
     // 같은 스터디에 숙제 올린 다른 선생님 수 (본인 제외)
@@ -914,14 +919,16 @@ function renderAdminHome(app){
   groupList.forEach(function(g, gi){
     var first = g.sessions[0];
     var total = g.sessions.length;
+    var groupEnded = g.sessions.some(function(s){ return s.ended; });
     // 그룹 전체 누적 출석/숙제 인원 (회차 합산)
     var rowId = 'admin-group-'+gi;
     // 시작/끝 날짜
     var dates = g.sessions.map(function(s){ return s.date; }).sort();
     var rangeStr = fmtDate(dates[0]) + (total>1 ? ' ~ ' + fmtDate(dates[total-1]) : '');
+    var endedBadge = groupEnded ? '<span class="badge-time closed" style="margin-left:6px;">종료됨</span>' : '';
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+first.subject+'</span>'+
+    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div class="title" style="margin-top:2px;">'+(first.title||first.subject)+'</div>';
     html += '<div class="meta" style="margin-top:4px;">'+total+'회차 · '+rangeStr+'</div>';
@@ -964,7 +971,8 @@ function renderAdminHome(app){
       html += '</div>';
     });
     // 그룹 전체 삭제
-    html += '<button class="act-btn" style="margin-top:12px;color:var(--danger);border-color:var(--danger-bg);" onclick="deleteGroup(\''+g.gid+'\')">스터디 전체 삭제 ('+total+'개 회차)</button>';
+    html += '<button class="act-btn" style="margin-top:12px;" onclick="toggleEndGroup(\''+g.gid+'\')">'+(groupEnded?'종료 해제':'스터디 종료하기')+'</button>';
+    html += '<button class="act-btn" style="margin-top:8px;color:var(--danger);border-color:var(--danger-bg);" onclick="deleteGroup(\''+g.gid+'\')">스터디 전체 삭제 ('+total+'개 회차)</button>';
     html += '</div>';  // 상세 끝
     html += '</div>';  // 카드 끝
   });
@@ -989,6 +997,32 @@ function deleteGroup(gid){
     done++;
     if(done === ids.length){
       toast('스터디 전체 삭제됨');
+      renderView(CUR_VIEW);
+    }
+  });
+}
+
+// 그룹(스터디) 종료 / 종료 해제 토글
+function toggleEndGroup(gid){
+  var ids = [];
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var g = DATA.sessions[sid].groupId || ('single_'+sid);
+    if(g === gid) ids.push(sid);
+  });
+  if(!ids.length) return;
+  // 현재 종료 상태 판단 (하나라도 ended면 종료된 것으로 봄)
+  var isEnded = ids.some(function(sid){ return DATA.sessions[sid].ended; });
+  var next = !isEnded;
+  var msg = next ? '이 스터디를 종료할까요? 강사들은 더 이상 출석/숙제 인증을 할 수 없습니다.'
+                 : '이 스터디의 종료를 해제할까요?';
+  if(!confirm(msg)) return;
+  var done = 0;
+  ids.forEach(function(sid){
+    db.ref('study_sessions/'+sid+'/ended').set(next);
+    DATA.sessions[sid].ended = next;
+    done++;
+    if(done === ids.length){
+      toast(next ? '스터디가 종료되었습니다' : '종료가 해제되었습니다');
       renderView(CUR_VIEW);
     }
   });
