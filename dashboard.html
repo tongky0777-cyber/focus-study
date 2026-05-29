@@ -862,10 +862,10 @@ function renderAdminStatus(app){
     var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
     var rowId = 'status-detail-'+idx;
 
-    html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\',this)">';
+    html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
     html += '<div class="card-row"><span class="subj">'+ses.subject+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
     html += '<div class="card-row" style="margin-top:4px;"><span class="title" style="font-size:14px;">'+(ses.title||ses.subject)+'</span>'+
-      '<span style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
+      '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">신청 '+enrolledNames.length+'명 · 출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>';
 
     // 상세 (기본 숨김)
@@ -896,11 +896,11 @@ function renderAdminStatus(app){
 }
 
 // 현황 카드 펼침/접힘 토글
-function toggleStatus(rowId, cardEl){
+function toggleStatus(rowId){
   var detail = document.getElementById(rowId);
   if(!detail) return;
-  var arrow = cardEl.querySelector('.card-row span:last-child');
-  var open = detail.style.display === 'none';
+  var arrow = document.getElementById(rowId+'-arrow');
+  var open = detail.style.display === 'none' || detail.style.display === '';
   detail.style.display = open ? 'block' : 'none';
   if(arrow) arrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
 }
