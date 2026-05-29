@@ -447,7 +447,10 @@ function myEnrollments(){
   var list = [];
   Object.keys(DATA.enrollments).forEach(function(key){
     var e = DATA.enrollments[key];
-    if(e.name === MY_NAME) list.push(e);
+    if(e.name !== MY_NAME) return;
+    // 실제 회차(세션)가 남아 있는 과목만 (삭제된 스터디는 제외)
+    if(subjectSessionCount(e.subject) === 0) return;
+    list.push(e);
   });
   return list;
 }
