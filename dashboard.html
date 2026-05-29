@@ -199,6 +199,15 @@
   </div>
 </div>
 
+<!-- 모달: 숙제 사진 보기 -->
+<div class="modal-bg" id="modal-photo">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-photo')">×</button>
+    <h3 id="photo-title">숙제 사진</h3>
+    <div id="photo-body"></div>
+  </div>
+</div>
+
 <script>
 // ===== Firebase =====
 var firebaseConfig = {
@@ -527,15 +536,7 @@ function renderTeacherHw(app){
     app.innerHTML = html; return;
   }
   if(!sessions.length){
-    html += '<div class="empty">스터디가 없습니다</div>';
-    // 진단 정보
-    var allSubj = {};
-    Object.keys(DATA.sessions).forEach(function(sid){ allSubj['['+DATA.sessions[sid].subject+']'] = true; });
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:14px;padding:12px;background:var(--bg);border-radius:8px;line-height:1.7;">'+
-      '<b>진단 정보</b><br>'+
-      '내 신청 과목: '+mySubjects.map(function(s){return '['+s+']';}).join(', ')+'<br>'+
-      '전체 스터디 과목: '+Object.keys(allSubj).join(', ')+'<br>'+
-      '<span style="color:var(--danger)">두 과목명이 똑같아야 숙제 탭에 표시됩니다</span></div>';
+    html += '<div class="empty">신청한 과목의 스터디가 없습니다</div>';
     app.innerHTML = html; return;
   }
   sessions.slice(0,10).forEach(function(ses){
@@ -581,22 +582,17 @@ function renderTeacherHw(app){
 // 같은 스터디의 다른 선생님 숙제 사진 모아 보기
 function viewPeerHw(sid){
   var recs = DATA.records[sid] || {};
-  var ses = DATA.sessions[sid] || {};
-  var blocks = [];
+  var groups = [];
   Object.keys(recs).forEach(function(name){
     var r = recs[name];
     if(!r.homework) return;
-    if(name === MY_NAME) return; // 본인 제외 (본인 건 내 숙제 보기로)
+    if(name === MY_NAME) return; // 본인 제외
     var photos = r.homeworkPhotos || (r.homeworkPhoto ? [r.homeworkPhoto] : []);
     if(!photos.length) return;
-    var imgs = photos.map(function(p, i){
-      return '<img src="'+p+'" style="max-width:100%;border-radius:8px;margin-bottom:8px;">';
-    }).join('');
-    blocks.push('<div style="margin-bottom:24px;"><div style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:bold;margin-bottom:8px;border-bottom:1px solid #444;padding-bottom:6px;">'+name+' ('+photos.length+'장)</div>'+imgs+'</div>');
+    groups.push({name:name, photos:photos});
   });
-  if(!blocks.length){ toast('다른 선생님 숙제가 없습니다'); return; }
-  var w = window.open('','_blank');
-  w.document.write('<html><head><title>'+(ses.title||ses.subject)+' 숙제</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#222;padding:16px;"><div style="max-width:700px;margin:0 auto;"><h3 style="color:#fff;font-family:sans-serif;">다른 선생님 숙제</h3>'+blocks.join('')+'</div></body></html>');
+  if(!groups.length){ toast('다른 선생님 숙제가 없습니다'); return; }
+  showPhotoModalGrouped('다른 선생님 숙제', groups);
 }
 
 var _hwSessionId = null;
@@ -642,7 +638,7 @@ function viewHw(sid){
   var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
-  openPhotoWindow(photos, MY_NAME);
+  showPhotoModal('내 숙제 ('+photos.length+'장)', photos);
 }
 
 // 어드민: 특정 강사의 숙제 사진 보기
@@ -651,16 +647,30 @@ function viewHwAdmin(sid, encodedName){
   var rec = (DATA.records[sid] && DATA.records[sid][name]) || {};
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
-  openPhotoWindow(photos, name);
+  showPhotoModal(name + ' 숙제 ('+photos.length+'장)', photos);
 }
 
-// 사진 새 창으로 보기
-function openPhotoWindow(photos, name){
+// 사진을 앱 내 모달로 표시 (새 창 X)
+function showPhotoModal(title, photos){
+  document.getElementById('photo-title').textContent = title;
   var imgs = photos.map(function(p, i){
-    return '<div style="margin-bottom:16px;"><div style="color:#aaa;font-size:13px;margin-bottom:6px;">'+(i+1)+' / '+photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;"></div>';
+    return '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;"></div>';
   }).join('');
-  var w = window.open('','_blank');
-  w.document.write('<html><head><title>'+name+' 숙제 ('+photos.length+'장)</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#222;padding:16px;"><div style="max-width:700px;margin:0 auto;"><h3 style="color:#fff;font-family:sans-serif;">'+name+' 숙제</h3>'+imgs+'</div></body></html>');
+  document.getElementById('photo-body').innerHTML = imgs;
+  openModal('modal-photo');
+}
+
+// 사진 여러 강사 묶음 모달 (이름별 구분)
+function showPhotoModalGrouped(title, groups){
+  document.getElementById('photo-title').textContent = title;
+  var html = groups.map(function(g){
+    var imgs = g.photos.map(function(p){
+      return '<img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;margin-bottom:8px;">';
+    }).join('');
+    return '<div style="margin-bottom:20px;"><div style="font-size:14px;font-weight:700;color:var(--main);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px;">'+escapeHtml(g.name)+' ('+g.photos.length+'장)</div>'+imgs+'</div>';
+  }).join('');
+  document.getElementById('photo-body').innerHTML = html;
+  openModal('modal-photo');
 }
 
 // 이미지 압축 (최대 1000px, JPEG 0.7)
