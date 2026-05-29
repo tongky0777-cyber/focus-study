@@ -721,6 +721,11 @@ function renderTeacherDeposit(app){
     html += '<div class="card"><div class="card-row"><div style="font-size:14px;font-weight:800;">'+e.subject+'</div>'+
       '<div style="font-size:16px;font-weight:900;color:'+(deducted>0?'var(--danger)':'var(--point)')+';">'+won(remain)+'</div></div>';
     html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">보증금 '+won(DEPOSIT)+(deducted>0?' · 차감 '+won(deducted):'')+'</div>';
+    // 입금/환급 상태 배지
+    var paid = !!e.paid, refunded = !!e.refunded;
+    html += '<div style="display:flex;gap:6px;margin-top:8px;">'+
+      '<span class="pill '+(paid?'o':'x')+'">보증금 입금 '+(paid?'확인됨':'대기')+'</span>'+
+      '<span class="pill '+(refunded?'o':'x')+'">환급 '+(refunded?'완료':'대기')+'</span></div>';
     if(detail.length){
       html += '<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">';
       detail.forEach(function(d){
@@ -990,24 +995,28 @@ function renderAdminSettle(app){
   html += '<div class="stat"><div class="label">총 환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">차감 합계 '+won(totalDeposit-totalRemain)+'</div></div>';
   html += '</div>';
 
-  html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사</th><th>과목</th><th>차감</th><th>환급액</th></tr>';
+  html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사 / 과목</th><th>환급액</th><th>입금</th><th>환급</th></tr>';
   names.forEach(function(n){
     var subjects = Object.keys(rows[n]);
     var acc = accountByName(n);
     subjects.forEach(function(s, i){
       var remain = rows[n][s];
       var deduct = DEPOSIT - remain;
-      html += '<tr>';
-      if(i===0) html += '<td class="name" rowspan="'+subjects.length+'">'+n+'</td>';
-      html += '<td>'+s+'</td>'+
-        '<td style="color:'+(deduct>0?'var(--danger)':'var(--muted)')+'">'+(deduct>0?'-'+won(deduct):'-')+'</td>'+
-        '<td style="font-weight:800;color:var(--point)">'+won(remain)+'</td></tr>';
+      var key = enrollKey(n, s);
+      var enr = key ? DATA.enrollments[key] : {};
+      var paid = !!enr.paid;
+      var refunded = !!enr.refunded;
+      var paidBtn = '<span class="pill '+(paid?'o':'x')+'" style="cursor:pointer" onclick="togglePaid(\''+encodeURIComponent(n)+'\',\''+encodeURIComponent(s)+'\')">'+(paid?'완료':'대기')+'</span>';
+      var refBtn = '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer" onclick="toggleRefunded(\''+encodeURIComponent(n)+'\',\''+encodeURIComponent(s)+'\')">'+(refunded?'완료':'대기')+'</span>';
+      html += '<tr><td class="name"><span style="color:var(--muted);font-size:11px">'+n+'</span><br>'+s+(deduct>0?' <span style="color:var(--danger);font-size:10px">(-'+won(deduct)+')</span>':'')+'</td>'+
+        '<td style="font-weight:800;color:var(--point)">'+won(remain)+'</td>'+
+        '<td>'+paidBtn+'</td><td>'+refBtn+'</td></tr>';
     });
     // 강사별 환급 계좌 행
     html += '<tr><td colspan="4" style="text-align:left;background:var(--bg);font-size:11px;color:var(--ink2);padding:6px 10px;">💳 '+(acc||'<span style="color:var(--muted)">환급 계좌 미등록</span>')+'</td></tr>';
   });
   html += '</table></div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 종료된 스터디만 정산에 반영됩니다.<br>※ 출석 또는 숙제 중 하나만 인증해도 차감되지 않습니다.</div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 입금/환급의 "대기"를 누르면 "완료"로 바뀝니다.<br>※ 송금은 토스에서 직접 하고, 여기서 처리 상태만 기록하세요.<br>※ 종료된 스터디만 정산 금액에 반영됩니다.</div>';
   app.innerHTML = html;
 }
 
@@ -1019,6 +1028,46 @@ function accountByName(name){
     if(u && u.name === name && u.account) found = u.account;
   });
   return found;
+}
+
+// 강사+과목으로 enrollment 키 찾기
+function enrollKey(name, subject){
+  var found = null;
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(e.name === name && e.subject === subject) found = k;
+  });
+  return found;
+}
+
+// 입금 확인 토글 (어드민)
+function togglePaid(encName, encSubject){
+  var name = decodeURIComponent(encName), subject = decodeURIComponent(encSubject);
+  var key = enrollKey(name, subject);
+  if(!key) return;
+  var cur = !!DATA.enrollments[key].paid;
+  var next = !cur;
+  db.ref('study_enrollments/'+key+'/paid').set(next, function(err){
+    if(err){ toast('변경 실패'); return; }
+    DATA.enrollments[key].paid = next;
+    toast(next ? '입금 확인 처리됨' : '입금 확인 취소됨');
+    renderView(CUR_VIEW);
+  });
+}
+
+// 환급 완료 토글 (어드민)
+function toggleRefunded(encName, encSubject){
+  var name = decodeURIComponent(encName), subject = decodeURIComponent(encSubject);
+  var key = enrollKey(name, subject);
+  if(!key) return;
+  var cur = !!DATA.enrollments[key].refunded;
+  var next = !cur;
+  db.ref('study_enrollments/'+key+'/refunded').set(next, function(err){
+    if(err){ toast('변경 실패'); return; }
+    DATA.enrollments[key].refunded = next;
+    toast(next ? '환급 완료 처리됨' : '환급 완료 취소됨');
+    renderView(CUR_VIEW);
+  });
 }
 
 // ===== 시작 =====
