@@ -506,9 +506,14 @@ function renderTeacherHw(app){
     var hw = !!rec.homework;
     var state = hwState(ses);
     var w = hwWindow(ses);
+    var photoCount = (rec.homeworkPhotos ? rec.homeworkPhotos.length : (rec.homeworkPhoto ? 1 : 0));
     var btn;
     if(hw){
-      btn = '<button class="act-btn done" onclick="viewHw(\''+ses.id+'\')">✓ 숙제 인증 완료<span class="ck">탭하여 보기</span></button>';
+      btn = '<button class="act-btn done" onclick="viewHw(\''+ses.id+'\')">✓ 인증 완료 ('+photoCount+'장)<span class="ck">탭하여 보기</span></button>';
+      // 마감 전이면 사진 추가 가능
+      if(state==='open'){
+        btn += '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">+ 사진 추가</button>';
+      }
     } else if(state==='open'){
       btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드</button>';
     } else if(state==='before'){
@@ -532,21 +537,34 @@ function uploadHw(sid){
   if(hwState(DATA.sessions[sid]) !== 'open'){ toast('숙제 인증 시간이 아닙니다'); return; }
   _hwSessionId = sid;
   var input = document.createElement('input');
-  input.type = 'file'; input.accept = 'image/*';
+  input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
   input.onchange = function(e){
-    var file = e.target.files[0];
-    if(!file) return;
-    toast('업로드 중...');
-    compressImage(file, function(base64){
-      var now = new Date().toISOString();
-      db.ref('study_records/'+sid+'/'+UID).update({
-        homework:true, homeworkPhoto:base64, homeworkAt:now, name:MY_NAME
-      }, function(err){
-        if(err){ toast('업로드 실패'); return; }
-        if(!DATA.records[sid]) DATA.records[sid]={};
-        DATA.records[sid][MY_NAME] = Object.assign(DATA.records[sid][MY_NAME]||{}, {homework:true, homeworkPhoto:base64, homeworkAt:now, name:MY_NAME});
-        toast('숙제 인증 완료! 📚');
-        renderView(CUR_VIEW);
+    var files = Array.prototype.slice.call(e.target.files);
+    if(!files.length) return;
+    toast(files.length + '장 업로드 중...');
+    // 모든 사진 압축 (순서 유지)
+    var photos = new Array(files.length);
+    var done = 0;
+    files.forEach(function(file, idx){
+      compressImage(file, function(base64){
+        photos[idx] = base64;
+        done++;
+        if(done === files.length){
+          // 기존에 올린 사진이 있으면 뒤에 이어붙임
+          var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
+          var existing = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
+          var all = existing.concat(photos);
+          var now = new Date().toISOString();
+          db.ref('study_records/'+sid+'/'+UID).update({
+            homework:true, homeworkPhotos:all, homeworkPhoto:all[0], homeworkAt:now, name:MY_NAME
+          }, function(err){
+            if(err){ toast('업로드 실패'); return; }
+            if(!DATA.records[sid]) DATA.records[sid]={};
+            DATA.records[sid][MY_NAME] = Object.assign(DATA.records[sid][MY_NAME]||{}, {homework:true, homeworkPhotos:all, homeworkPhoto:all[0], homeworkAt:now, name:MY_NAME});
+            toast(all.length + '장 인증 완료! 📚');
+            renderView(CUR_VIEW);
+          });
+        }
       });
     });
   };
@@ -555,9 +573,13 @@ function uploadHw(sid){
 
 function viewHw(sid){
   var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
-  if(!rec.homeworkPhoto){ toast('사진이 없습니다'); return; }
+  var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
+  if(!photos.length){ toast('사진이 없습니다'); return; }
+  var imgs = photos.map(function(p, i){
+    return '<div style="margin-bottom:16px;"><div style="color:#aaa;font-size:13px;margin-bottom:6px;">'+(i+1)+' / '+photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;"></div>';
+  }).join('');
   var w = window.open('','_blank');
-  w.document.write('<html><head><title>숙제 인증</title></head><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="'+rec.homeworkPhoto+'" style="max-width:100%;max-height:100vh;"></body></html>');
+  w.document.write('<html><head><title>숙제 인증 ('+photos.length+'장)</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#222;padding:16px;"><div style="max-width:700px;margin:0 auto;">'+imgs+'</div></body></html>');
 }
 
 // 이미지 압축 (최대 1000px, JPEG 0.7)
