@@ -128,7 +128,7 @@
 <div class="modal-bg" id="modal-session">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('modal-session')">×</button>
-    <h3>스터디 개설</h3>
+    <h3 id="ses-modal-title">스터디 개설</h3>
     <div class="field">
       <label>과목</label>
       <input id="ses-subject" type="text" placeholder="예) 고1 공통수학">
@@ -148,7 +148,7 @@
         · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b>
       </div>
     </div>
-    <button class="btn" onclick="saveSession()">개설하기</button>
+    <button class="btn" id="ses-save-btn" onclick="saveSession()">개설하기</button>
   </div>
 </div>
 
@@ -676,13 +676,32 @@ function renderAdminHome(app){
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
       '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
       '<div class="meta" style="margin-top:6px;">출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>'+
-      '<div class="sess-actions"><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">삭제</button></div></div>';
+      '<div class="sess-actions"><button class="act-btn" onclick="openEditSession(\''+ses.id+'\')">수정</button><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">삭제</button></div></div>';
   });
   app.innerHTML = html;
 }
 
+var _editSessionId = null; // 수정 중인 세션 id (null이면 신규 개설)
+
 function openSessionModal(){
+  _editSessionId = null;
+  document.getElementById('ses-modal-title').textContent = '스터디 개설';
+  document.getElementById('ses-save-btn').textContent = '개설하기';
+  document.getElementById('ses-subject').value = '';
+  document.getElementById('ses-title').value = '';
   document.getElementById('ses-date').value = new Date().toISOString().slice(0,10);
+  openModal('modal-session');
+}
+
+function openEditSession(sid){
+  var ses = DATA.sessions[sid];
+  if(!ses) return;
+  _editSessionId = sid;
+  document.getElementById('ses-modal-title').textContent = '스터디 수정';
+  document.getElementById('ses-save-btn').textContent = '수정 저장';
+  document.getElementById('ses-subject').value = ses.subject || '';
+  document.getElementById('ses-title').value = ses.title || '';
+  document.getElementById('ses-date').value = ses.date || '';
   openModal('modal-session');
 }
 
@@ -692,17 +711,33 @@ function saveSession(){
   var date = document.getElementById('ses-date').value;
   if(!subject){ toast('과목을 입력해주세요'); return; }
   if(!date){ toast('날짜를 입력해주세요'); return; }
-  var ref = db.ref('study_sessions').push();
-  var ses = { subject:subject, title:title, date:date, createdAt:new Date().toISOString() };
-  ref.set(ses, function(err){
-    if(err){ toast('개설 실패'); return; }
-    DATA.sessions[ref.key] = ses;
-    closeModal('modal-session');
-    document.getElementById('ses-subject').value='';
-    document.getElementById('ses-title').value='';
-    toast('스터디 개설 완료!');
-    showView('a-home');
-  });
+
+  if(_editSessionId){
+    // 수정 모드 — 기존 createdAt 유지
+    var old = DATA.sessions[_editSessionId] || {};
+    var upd = { subject:subject, title:title, date:date };
+    db.ref('study_sessions/'+_editSessionId).update(upd, function(err){
+      if(err){ toast('수정 실패'); return; }
+      DATA.sessions[_editSessionId] = Object.assign(old, upd);
+      closeModal('modal-session');
+      _editSessionId = null;
+      toast('수정 완료!');
+      showView('a-home');
+    });
+  } else {
+    // 신규 개설
+    var ref = db.ref('study_sessions').push();
+    var ses = { subject:subject, title:title, date:date, createdAt:new Date().toISOString() };
+    ref.set(ses, function(err){
+      if(err){ toast('개설 실패'); return; }
+      DATA.sessions[ref.key] = ses;
+      closeModal('modal-session');
+      document.getElementById('ses-subject').value='';
+      document.getElementById('ses-title').value='';
+      toast('스터디 개설 완료!');
+      showView('a-home');
+    });
+  }
 }
 
 function deleteSession(sid){
