@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a2d23">
+<link rel="manifest" href="manifest.json">
+<title>포커스 스터디 · 대시보드</title>
+<style>
+  :root{
+    --main:#1a2d23; --point:#16825a; --point2:#0f6e56;
+    --bg:#f4f6f5; --white:#fff; --ink:#1a2d23; --ink2:#555;
+    --muted:#999; --line:#e5e8e6; --danger:#c0392b; --danger-bg:#fdecea;
+    --ok:#16825a; --ok-bg:#e6f4ee; --warn:#c08c22; --warn-bg:#fbf3e0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:70px;}
+  .topbar{background:var(--main);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+  .topbar .brand{font-size:14px;font-weight:800;}
+  .topbar .brand small{display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.55);margin-top:1px;}
+  .topbar .user{display:flex;align-items:center;gap:8px;font-size:12px;}
+  .topbar .role-badge{background:var(--point);font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;}
+  .topbar .role-badge.admin{background:#c08c22;}
+  .logout{background:rgba(255,255,255,.12);color:#fff;border:none;font-size:11px;padding:5px 10px;border-radius:6px;cursor:pointer;}
+  .wrap{max-width:760px;margin:0 auto;padding:16px;}
+  .view{display:none;}
+  .view.on{display:block;}
+
+  .section-title{font-size:13px;font-weight:800;color:var(--main);margin:18px 0 10px;display:flex;align-items:center;gap:6px;}
+  .section-title:first-child{margin-top:4px;}
+
+  .card{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px;}
+  .card-row{display:flex;align-items:center;justify-content:space-between;}
+
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px;}
+  .stat{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px;}
+  .stat .label{font-size:11px;color:var(--muted);font-weight:600;}
+  .stat .num{font-size:24px;font-weight:900;color:var(--main);margin-top:4px;}
+  .stat .num.point{color:var(--point);}
+  .stat .num.danger{color:var(--danger);}
+  .stat .sub{font-size:11px;color:var(--muted);margin-top:2px;}
+
+  .sess{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+  .sess .subj{font-size:11px;font-weight:700;color:var(--point);background:var(--ok-bg);display:inline-block;padding:3px 9px;border-radius:20px;margin-bottom:8px;}
+  .sess .title{font-size:15px;font-weight:800;color:var(--ink);}
+  .sess .meta{font-size:12px;color:var(--muted);margin-top:4px;}
+  .sess-actions{display:flex;gap:8px;margin-top:12px;}
+  .act-btn{flex:1;padding:11px;font-size:13px;font-weight:700;border-radius:9px;border:1px solid var(--line);background:var(--white);color:var(--ink2);cursor:pointer;transition:.15s;}
+  .act-btn.done{background:var(--ok-bg);color:var(--point);border-color:var(--point);}
+  .act-btn.active{background:var(--point);color:#fff;border-color:var(--point);}
+  .act-btn.disabled{opacity:.45;cursor:not-allowed;}
+  .act-btn .ck{font-size:11px;display:block;margin-top:2px;font-weight:400;}
+
+  .badge-time{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+  .badge-time.open{background:var(--ok-bg);color:var(--point);}
+  .badge-time.before{background:var(--warn-bg);color:var(--warn);}
+  .badge-time.closed{background:#f0f0f0;color:var(--muted);}
+
+  .btn{width:100%;padding:14px;font-size:15px;font-weight:800;color:#fff;background:var(--point);border:none;border-radius:11px;cursor:pointer;font-family:inherit;}
+  .btn:active{background:var(--point2);}
+  .btn.sec{background:var(--bg);color:var(--ink2);border:1px solid var(--line);}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:6px;}
+  .field input,.field select{width:100%;padding:12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--point);background:var(--white);}
+  .field-row{display:flex;gap:10px;}
+  .field-row .field{flex:1;}
+
+  .empty{text-align:center;color:var(--muted);padding:30px 20px;font-size:13px;}
+  .loading{text-align:center;color:var(--muted);padding:40px;font-size:13px;}
+
+  table.tbl{width:100%;border-collapse:collapse;font-size:12px;background:var(--white);border-radius:12px;overflow:hidden;}
+  table.tbl th{background:var(--main);color:#fff;padding:10px 8px;font-weight:700;text-align:center;font-size:11px;}
+  table.tbl td{padding:9px 8px;text-align:center;border-bottom:1px solid var(--line);}
+  table.tbl td.name{text-align:left;font-weight:700;}
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px;border:1px solid var(--line);}
+  .pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+  .pill.o{background:var(--ok-bg);color:var(--point);}
+  .pill.x{background:var(--danger-bg);color:var(--danger);}
+
+  /* 하단 탭 */
+  .tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--line);display:flex;z-index:50;max-width:760px;margin:0 auto;}
+  .tabbar .tab{flex:1;text-align:center;padding:10px 4px 8px;cursor:pointer;color:var(--muted);}
+  .tabbar .tab .ico{font-size:20px;line-height:1;}
+  .tabbar .tab .lbl{font-size:10px;font-weight:700;margin-top:3px;}
+  .tabbar .tab.on{color:var(--point);}
+
+  /* 모달 */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center;}
+  .modal-bg.on{display:flex;}
+  .modal{background:var(--white);border-radius:18px 18px 0 0;width:100%;max-width:760px;padding:22px 20px 30px;max-height:85vh;overflow-y:auto;}
+  .modal h3{font-size:17px;font-weight:800;margin-bottom:16px;color:var(--main);}
+  .modal-close{float:right;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;}
+  @media(min-width:768px){
+    .modal-bg{align-items:center;}
+    .modal{border-radius:18px;max-width:480px;}
+    .stat-grid{grid-template-columns:repeat(4,1fr);}
+  }
+
+  .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--main);color:#fff;font-size:13px;font-weight:600;padding:12px 22px;border-radius:30px;z-index:200;opacity:0;transition:.3s;pointer-events:none;}
+  .toast.on{opacity:1;}
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">포커스 스터디<small>출석 · 보증금 관리</small></div>
+  <div class="user">
+    <span id="user-name">-</span>
+    <span class="role-badge" id="role-badge">강사</span>
+    <button class="logout" onclick="logout()">로그아웃</button>
+  </div>
+</div>
+
+<div class="wrap" id="app">
+  <div class="loading">불러오는 중...</div>
+</div>
+
+<!-- 하단 탭 (역할별로 동적 생성) -->
+<div class="tabbar" id="tabbar"></div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 모달: 스터디 개설 (어드민) -->
+<div class="modal-bg" id="modal-session">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-session')">×</button>
+    <h3>스터디 개설</h3>
+    <div class="field">
+      <label>과목</label>
+      <input id="ses-subject" type="text" placeholder="예) 고1 공통수학">
+    </div>
+    <div class="field">
+      <label>제목</label>
+      <input id="ses-title" type="text" placeholder="예) 3주차 함수의 연속">
+    </div>
+    <div class="field">
+      <label>날짜</label>
+      <input id="ses-date" type="date">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>출석 시작</label>
+        <input id="ses-start" type="time" value="19:00">
+      </div>
+      <div class="field">
+        <label>출석 마감</label>
+        <input id="ses-end" type="time" value="22:00">
+      </div>
+    </div>
+    <button class="btn" onclick="saveSession()">개설하기</button>
+  </div>
+</div>
+
+<!-- 모달: 과목 신청 (강사) -->
+<div class="modal-bg" id="modal-enroll">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-enroll')">×</button>
+    <h3>스터디 신청</h3>
+    <div class="field">
+      <label>신청할 과목</label>
+      <select id="enr-subject"></select>
+    </div>
+    <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
+      <div style="font-size:13px;color:var(--point);font-weight:700;">보증금 안내</div>
+      <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.6;">
+        · 과목당 보증금 50,000원<br>
+        · 출석 또는 숙제 인증 시 차감 없음<br>
+        · 결석 + 숙제 미인증 시 1만원 차감
+      </div>
+    </div>
+    <button class="btn" onclick="saveEnroll()">신청하기 (보증금 5만원)</button>
+  </div>
+</div>
+
+<script>
+// ===== Firebase =====
+var firebaseConfig = {
+  apiKey: "AIzaSyDfQxi6q8xVUVgnvwON446Lnd-Becpwvbk",
+  authDomain: "kimbjmath.firebaseapp.com",
+  databaseURL: "https://kimbjmath-default-rtdb.firebaseio.com",
+  projectId: "kimbjmath",
+  storageBucket: "kimbjmath.firebasestorage.app",
+  messagingSenderId: "664889936709",
+  appId: "1:664889936709:web:2df1494b0cd978c64e4c2c"
+};
+if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
+var DEPOSIT = 50000;     // 과목당 보증금
+var DEDUCT = 10000;      // 결석+숙제미인증 차감액
+
+// ===== 로그인 확인 =====
+var UID = localStorage.getItem('study_uid');
+var MY_NAME = localStorage.getItem('study_name');
+var MY_ROLE = localStorage.getItem('study_role') || 'teacher';
+if(!UID){ location.href = 'index.html'; }
+
+document.getElementById('user-name').textContent = MY_NAME;
+var roleBadge = document.getElementById('role-badge');
+if(MY_ROLE === 'admin'){ roleBadge.textContent = '어드민'; roleBadge.classList.add('admin'); }
+
+// ===== 전역 데이터 캐시 =====
+var DATA = { sessions:{}, enrollments:{}, records:{}, users:{} };
+var CUR_VIEW = '';
+
+function logout(){
+  localStorage.removeItem('study_uid');
+  localStorage.removeItem('study_name');
+  localStorage.removeItem('study_role');
+  location.href = 'index.html';
+}
+
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  setTimeout(function(){ t.classList.remove('on'); }, 1800);
+}
+function openModal(id){ document.getElementById(id).classList.add('on'); }
+function closeModal(id){ document.getElementById(id).classList.remove('on'); }
+
+// ===== 데이터 로드 =====
+function loadAll(cb){
+  var keys = ['study_sessions','study_enrollments','study_records','study_users'];
+  var loaded = 0;
+  keys.forEach(function(k){
+    db.ref(k).once('value', function(snap){
+      var short = k.replace('study_','');
+      DATA[short] = snap.val() || {};
+      loaded++;
+      if(loaded === keys.length && cb) cb();
+    });
+  });
+}
+
+// ===== 탭바 구성 =====
+function buildTabs(){
+  var tabs = (MY_ROLE === 'admin') ? [
+    {id:'a-home', ico:'📋', lbl:'스터디'},
+    {id:'a-status', ico:'📊', lbl:'현황'},
+    {id:'a-settle', ico:'💰', lbl:'정산'}
+  ] : [
+    {id:'t-home', ico:'🏠', lbl:'현황'},
+    {id:'t-attend', ico:'✅', lbl:'출석'},
+    {id:'t-hw', ico:'📚', lbl:'숙제'},
+    {id:'t-deposit', ico:'💰', lbl:'보증금'}
+  ];
+  var bar = document.getElementById('tabbar');
+  bar.innerHTML = tabs.map(function(t){
+    return '<div class="tab" id="tab-'+t.id+'" onclick="showView(\''+t.id+'\')">'+
+      '<div class="ico">'+t.ico+'</div><div class="lbl">'+t.lbl+'</div></div>';
+  }).join('');
+  showView(tabs[0].id);
+}
+
+function showView(id){
+  CUR_VIEW = id;
+  document.querySelectorAll('.tabbar .tab').forEach(function(t){ t.classList.remove('on'); });
+  var tabEl = document.getElementById('tab-'+id);
+  if(tabEl) tabEl.classList.add('on');
+  renderView(id);
+}
+
+// ===== 헬퍼: 차감 계산 =====
+// 특정 강사의 특정 과목 보증금 잔액 계산
+function calcDeposit(name, subject){
+  var deductions = 0;
+  // 해당 과목의 모든 세션을 찾아서, 출석X AND 숙제X면 차감
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    // 마감 시간이 지난 세션만 정산 대상
+    if(!isSessionClosed(ses)) return;
+    var rec = (DATA.records[sid] && DATA.records[sid][name]) || {};
+    var attended = !!rec.attended;
+    var hw = !!rec.homework;
+    if(!attended && !hw) deductions += DEDUCT;
+  });
+  return Math.max(0, DEPOSIT - deductions);
+}
+
+// 세션 시간 상태: 'before'|'open'|'closed'
+function sessionTimeState(ses){
+  var now = new Date();
+  var start = new Date(ses.date + 'T' + ses.start + ':00');
+  var end = new Date(ses.date + 'T' + ses.end + ':00');
+  if(now < start) return 'before';
+  if(now > end) return 'closed';
+  return 'open';
+}
+function isSessionClosed(ses){ return sessionTimeState(ses) === 'closed'; }
+
+function fmtDate(d){
+  var dt = new Date(d + 'T00:00:00');
+  var days = ['일','월','화','수','목','금','토'];
+  return (dt.getMonth()+1)+'월 '+dt.getDate()+'일('+days[dt.getDay()]+')';
+}
+function won(n){ return n.toLocaleString('ko-KR') + '원'; }
+
+// ===== 렌더링 라우터 =====
+function renderView(id){
+  var app = document.getElementById('app');
+  switch(id){
+    case 't-home': renderTeacherHome(app); break;
+    case 't-attend': renderTeacherAttend(app); break;
+    case 't-hw': renderTeacherHw(app); break;
+    case 't-deposit': renderTeacherDeposit(app); break;
+    case 'a-home': renderAdminHome(app); break;
+    case 'a-status': renderAdminStatus(app); break;
+    case 'a-settle': renderAdminSettle(app); break;
+  }
+}
+
+// ============ 강사 화면 ============
+function myEnrollments(){
+  var list = [];
+  Object.keys(DATA.enrollments).forEach(function(key){
+    var e = DATA.enrollments[key];
+    if(e.name === MY_NAME) list.push(e);
+  });
+  return list;
+}
+
+function renderTeacherHome(app){
+  var enrolls = myEnrollments();
+  var totalDeposit = 0, totalRemain = 0;
+  enrolls.forEach(function(e){
+    totalDeposit += DEPOSIT;
+    totalRemain += calcDeposit(MY_NAME, e.subject);
+  });
+
+  // 오늘/다가오는 세션 (내 신청 과목만)
+  var mySubjects = enrolls.map(function(e){ return e.subject; });
+  var upcoming = [];
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(mySubjects.indexOf(ses.subject) < 0) return;
+    if(sessionTimeState(ses) !== 'closed') upcoming.push(Object.assign({id:sid}, ses));
+  });
+  upcoming.sort(function(a,b){ return (a.date+a.start).localeCompare(b.date+b.start); });
+
+  var html = '<div class="section-title">내 보증금 현황</div>';
+  html += '<div class="stat-grid">';
+  html += '<div class="stat"><div class="label">신청 과목</div><div class="num">'+enrolls.length+'<span style="font-size:14px">개</span></div></div>';
+  html += '<div class="stat"><div class="label">예상 환급액</div><div class="num point">'+(totalRemain/10000)+'<span style="font-size:14px">만원</span></div><div class="sub">총 보증금 '+(totalDeposit/10000)+'만원</div></div>';
+  html += '</div>';
+
+  html += '<div class="section-title">다가오는 스터디</div>';
+  if(!upcoming.length){
+    html += '<div class="empty">예정된 스터디가 없습니다</div>';
+  } else {
+    upcoming.forEach(function(ses){
+      var state = sessionTimeState(ses);
+      var badge = state==='open' ? '<span class="badge-time open">출석 가능</span>'
+                : state==='before' ? '<span class="badge-time before">'+ses.start+' 시작</span>'
+                : '<span class="badge-time closed">마감</span>';
+      html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
+        '<div class="title">'+(ses.title||ses.subject)+'</div>'+
+        '<div class="meta">'+fmtDate(ses.date)+' · '+ses.start+'~'+ses.end+'</div></div>';
+    });
+  }
+
+  if(!enrolls.length){
+    html += '<div class="section-title">스터디 신청</div>';
+    html += '<div class="card"><div style="font-size:13px;color:var(--ink2);margin-bottom:12px;">아직 신청한 과목이 없습니다. 스터디에 참여하려면 과목을 신청하세요.</div>';
+    html += '<button class="btn" onclick="openEnrollModal()">+ 스터디 신청하기</button></div>';
+  } else {
+    html += '<button class="btn sec" style="margin-top:8px;" onclick="openEnrollModal()">+ 다른 과목 추가 신청</button>';
+  }
+  app.innerHTML = html;
+}
+
+function renderTeacherAttend(app){
+  var enrolls = myEnrollments();
+  var mySubjects = enrolls.map(function(e){ return e.subject; });
+  // 오늘 날짜의 세션
+  var today = new Date().toISOString().slice(0,10);
+  var todaySessions = [];
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(mySubjects.indexOf(ses.subject) < 0) return;
+    if(ses.date === today) todaySessions.push(Object.assign({id:sid}, ses));
+  });
+  todaySessions.sort(function(a,b){ return a.start.localeCompare(b.start); });
+
+  var html = '<div class="section-title">오늘의 출석</div>';
+  if(!mySubjects.length){
+    html += '<div class="empty">신청한 과목이 없습니다.<br>현황 탭에서 스터디를 신청하세요.</div>';
+    app.innerHTML = html; return;
+  }
+  if(!todaySessions.length){
+    html += '<div class="empty">오늘 예정된 스터디가 없습니다</div>';
+    app.innerHTML = html; return;
+  }
+
+  todaySessions.forEach(function(ses){
+    var state = sessionTimeState(ses);
+    var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
+    var attended = !!rec.attended;
+    var badge = state==='open' ? '<span class="badge-time open">출석 가능</span>'
+              : state==='before' ? '<span class="badge-time before">'+ses.start+' 시작</span>'
+              : '<span class="badge-time closed">마감됨</span>';
+    var btn;
+    if(attended){
+      btn = '<button class="act-btn done" disabled>✓ 출석 완료<span class="ck">'+(rec.attendedAt?rec.attendedAt.slice(11,16):'')+'</span></button>';
+    } else if(state==='open'){
+      btn = '<button class="act-btn active" onclick="checkAttend(\''+ses.id+'\')">출석 체크하기</button>';
+    } else if(state==='before'){
+      btn = '<button class="act-btn disabled" disabled>'+ses.start+' 부터 가능</button>';
+    } else {
+      btn = '<button class="act-btn disabled" disabled>출석 마감</button>';
+    }
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
+      '<div class="title">'+(ses.title||ses.subject)+'</div>'+
+      '<div class="meta">'+ses.start+'~'+ses.end+' 사이 출석 체크</div>'+
+      '<div class="sess-actions">'+btn+'</div></div>';
+  });
+  app.innerHTML = html;
+}
+
+function checkAttend(sid){
+  var ses = DATA.sessions[sid];
+  if(sessionTimeState(ses) !== 'open'){ toast('출석 가능 시간이 아닙니다'); return; }
+  var ref = db.ref('study_records/'+sid+'/'+UID);
+  var now = new Date().toISOString();
+  ref.update({ attended:true, attendedAt:now, name:MY_NAME }, function(err){
+    if(err){ toast('오류: 다시 시도해주세요'); return; }
+    if(!DATA.records[sid]) DATA.records[sid] = {};
+    DATA.records[sid][MY_NAME] = Object.assign(DATA.records[sid][MY_NAME]||{}, {attended:true, attendedAt:now, name:MY_NAME});
+    toast('출석 완료! ✅');
+    renderView(CUR_VIEW);
+  });
+}
+
+function renderTeacherHw(app){
+  var enrolls = myEnrollments();
+  var mySubjects = enrolls.map(function(e){ return e.subject; });
+  // 마감 안 지난 + 오늘 이후 세션 위주로 숙제 업로드 가능
+  var sessions = [];
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(mySubjects.indexOf(ses.subject) < 0) return;
+    sessions.push(Object.assign({id:sid}, ses));
+  });
+  sessions.sort(function(a,b){ return (b.date+b.start).localeCompare(a.date+a.start); });
+
+  var html = '<div class="section-title">숙제 인증</div>';
+  if(!mySubjects.length){
+    html += '<div class="empty">신청한 과목이 없습니다</div>';
+    app.innerHTML = html; return;
+  }
+  if(!sessions.length){
+    html += '<div class="empty">스터디가 없습니다</div>';
+    app.innerHTML = html; return;
+  }
+  sessions.slice(0,10).forEach(function(ses){
+    var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
+    var hw = !!rec.homework;
+    var btn;
+    if(hw){
+      btn = '<button class="act-btn done" onclick="viewHw(\''+ses.id+'\')">✓ 숙제 인증 완료<span class="ck">탭하여 보기</span></button>';
+    } else {
+      btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드</button>';
+    }
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span></div>'+
+      '<div class="title">'+(ses.title||ses.subject)+'</div>'+
+      '<div class="meta">'+fmtDate(ses.date)+'</div>'+
+      '<div class="sess-actions">'+btn+'</div></div>';
+  });
+  app.innerHTML = html;
+}
+
+var _hwSessionId = null;
+function uploadHw(sid){
+  _hwSessionId = sid;
+  var input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    toast('업로드 중...');
+    compressImage(file, function(base64){
+      var now = new Date().toISOString();
+      db.ref('study_records/'+sid+'/'+UID).update({
+        homework:true, homeworkPhoto:base64, homeworkAt:now, name:MY_NAME
+      }, function(err){
+        if(err){ toast('업로드 실패'); return; }
+        if(!DATA.records[sid]) DATA.records[sid]={};
+        DATA.records[sid][MY_NAME] = Object.assign(DATA.records[sid][MY_NAME]||{}, {homework:true, homeworkPhoto:base64, homeworkAt:now, name:MY_NAME});
+        toast('숙제 인증 완료! 📚');
+        renderView(CUR_VIEW);
+      });
+    });
+  };
+  input.click();
+}
+
+function viewHw(sid){
+  var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
+  if(!rec.homeworkPhoto){ toast('사진이 없습니다'); return; }
+  var w = window.open('','_blank');
+  w.document.write('<html><head><title>숙제 인증</title></head><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="'+rec.homeworkPhoto+'" style="max-width:100%;max-height:100vh;"></body></html>');
+}
+
+// 이미지 압축 (최대 1000px, JPEG 0.7)
+function compressImage(file, cb){
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var img = new Image();
+    img.onload = function(){
+      var max = 1000;
+      var w = img.width, h = img.height;
+      if(w > max || h > max){
+        if(w > h){ h = h*max/w; w = max; } else { w = w*max/h; h = max; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderTeacherDeposit(app){
+  var enrolls = myEnrollments();
+  var html = '<div class="section-title">과목별 보증금</div>';
+  if(!enrolls.length){
+    html += '<div class="empty">신청한 과목이 없습니다</div>';
+    app.innerHTML = html; return;
+  }
+  var totalRemain = 0;
+  enrolls.forEach(function(e){
+    var remain = calcDeposit(MY_NAME, e.subject);
+    totalRemain += remain;
+    var deducted = DEPOSIT - remain;
+    // 해당 과목 세션별 상세
+    var detail = [];
+    Object.keys(DATA.sessions).forEach(function(sid){
+      var ses = DATA.sessions[sid];
+      if(ses.subject !== e.subject) return;
+      if(!isSessionClosed(ses)) return;
+      var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
+      var ok = rec.attended || rec.homework;
+      detail.push({title:ses.title||ses.subject, date:ses.date, ok:ok, att:!!rec.attended, hw:!!rec.homework});
+    });
+    detail.sort(function(a,b){ return b.date.localeCompare(a.date); });
+
+    html += '<div class="card"><div class="card-row"><div style="font-size:14px;font-weight:800;">'+e.subject+'</div>'+
+      '<div style="font-size:16px;font-weight:900;color:'+(deducted>0?'var(--danger)':'var(--point)')+';">'+won(remain)+'</div></div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">보증금 '+won(DEPOSIT)+(deducted>0?' · 차감 '+won(deducted):'')+'</div>';
+    if(detail.length){
+      html += '<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">';
+      detail.forEach(function(d){
+        var mark = d.ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-1만원</span>';
+        var sub = (d.att?'출석 ':'')+(d.hw?'숙제':'')||'미인증';
+        html += '<div class="card-row" style="padding:5px 0;font-size:12px;"><span>'+fmtDate(d.date)+' · <span style="color:var(--muted)">'+sub+'</span></span>'+mark+'</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html = '<div class="stat-grid"><div class="stat" style="grid-column:1/-1;"><div class="label">총 예상 환급액</div><div class="num point">'+won(totalRemain)+'</div></div></div>' + html;
+  app.innerHTML = html;
+}
+
+function openEnrollModal(){
+  // 개설된 과목 목록에서 미신청 과목만
+  var allSubjects = {};
+  Object.keys(DATA.sessions).forEach(function(sid){ allSubjects[DATA.sessions[sid].subject] = true; });
+  var mySubjects = myEnrollments().map(function(e){ return e.subject; });
+  var avail = Object.keys(allSubjects).filter(function(s){ return mySubjects.indexOf(s) < 0; });
+  var sel = document.getElementById('enr-subject');
+  if(!avail.length){
+    sel.innerHTML = '<option value="">신청 가능한 과목이 없습니다</option>';
+  } else {
+    sel.innerHTML = avail.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+  }
+  openModal('modal-enroll');
+}
+
+function saveEnroll(){
+  var subject = document.getElementById('enr-subject').value;
+  if(!subject){ toast('신청할 과목이 없습니다'); return; }
+  var key = UID + '_' + subject.replace(/[.#$\[\]\/]/g,'_');
+  var enroll = { name:MY_NAME, subject:subject, deposit:DEPOSIT, enrolledAt:new Date().toISOString() };
+  db.ref('study_enrollments/'+key).set(enroll, function(err){
+    if(err){ toast('신청 실패'); return; }
+    DATA.enrollments[key] = enroll;
+    closeModal('modal-enroll');
+    toast('스터디 신청 완료! 💰');
+    showView('t-home');
+  });
+}
+
+// ============ 어드민 화면 ============
+function renderAdminHome(app){
+  var sessions = [];
+  Object.keys(DATA.sessions).forEach(function(sid){ sessions.push(Object.assign({id:sid}, DATA.sessions[sid])); });
+  sessions.sort(function(a,b){ return (b.date+b.start).localeCompare(a.date+a.start); });
+
+  var html = '<button class="btn" onclick="openSessionModal()" style="margin-bottom:14px;">+ 스터디 개설</button>';
+  html += '<div class="section-title">개설된 스터디</div>';
+  if(!sessions.length){
+    html += '<div class="empty">개설된 스터디가 없습니다</div>';
+    app.innerHTML = html; return;
+  }
+  sessions.forEach(function(ses){
+    var state = sessionTimeState(ses);
+    var recs = DATA.records[ses.id] || {};
+    var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
+    var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
+    var badge = state==='open' ? '<span class="badge-time open">진행중</span>'
+              : state==='before' ? '<span class="badge-time before">예정</span>'
+              : '<span class="badge-time closed">종료</span>';
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
+      '<div class="title">'+(ses.title||ses.subject)+'</div>'+
+      '<div class="meta">'+fmtDate(ses.date)+' · '+ses.start+'~'+ses.end+'</div>'+
+      '<div class="meta" style="margin-top:6px;">출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>'+
+      '<div class="sess-actions"><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">삭제</button></div></div>';
+  });
+  app.innerHTML = html;
+}
+
+function openSessionModal(){
+  document.getElementById('ses-date').value = new Date().toISOString().slice(0,10);
+  openModal('modal-session');
+}
+
+function saveSession(){
+  var subject = document.getElementById('ses-subject').value.trim();
+  var title = document.getElementById('ses-title').value.trim();
+  var date = document.getElementById('ses-date').value;
+  var start = document.getElementById('ses-start').value;
+  var end = document.getElementById('ses-end').value;
+  if(!subject){ toast('과목을 입력해주세요'); return; }
+  if(!date){ toast('날짜를 입력해주세요'); return; }
+  if(start >= end){ toast('마감 시간이 시작보다 빨라요'); return; }
+  var ref = db.ref('study_sessions').push();
+  var ses = { subject:subject, title:title, date:date, start:start, end:end, createdAt:new Date().toISOString() };
+  ref.set(ses, function(err){
+    if(err){ toast('개설 실패'); return; }
+    DATA.sessions[ref.key] = ses;
+    closeModal('modal-session');
+    document.getElementById('ses-subject').value='';
+    document.getElementById('ses-title').value='';
+    toast('스터디 개설 완료!');
+    showView('a-home');
+  });
+}
+
+function deleteSession(sid){
+  if(!confirm('이 스터디를 삭제할까요? 출석/숙제 기록도 함께 삭제됩니다.')) return;
+  db.ref('study_sessions/'+sid).remove();
+  db.ref('study_records/'+sid).remove();
+  delete DATA.sessions[sid];
+  delete DATA.records[sid];
+  toast('삭제되었습니다');
+  renderView(CUR_VIEW);
+}
+
+function renderAdminStatus(app){
+  var sessions = [];
+  Object.keys(DATA.sessions).forEach(function(sid){ sessions.push(Object.assign({id:sid}, DATA.sessions[sid])); });
+  sessions.sort(function(a,b){ return (b.date+b.start).localeCompare(a.date+a.start); });
+
+  var html = '<div class="section-title">스터디별 참여 현황</div>';
+  if(!sessions.length){ html += '<div class="empty">개설된 스터디가 없습니다</div>'; app.innerHTML=html; return; }
+
+  sessions.forEach(function(ses){
+    // 이 과목 신청자 목록
+    var enrolledNames = [];
+    Object.keys(DATA.enrollments).forEach(function(k){
+      if(DATA.enrollments[k].subject === ses.subject) enrolledNames.push(DATA.enrollments[k].name);
+    });
+    var recs = DATA.records[ses.id] || {};
+    html += '<div class="card"><div class="card-row"><span class="subj">'+ses.subject+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
+    html += '<div class="title" style="font-size:14px;margin-bottom:8px;">'+(ses.title||ses.subject)+'</div>';
+    if(!enrolledNames.length){
+      html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
+    } else {
+      html += '<div class="tbl-wrap"><table class="tbl"><tr><th>강사</th><th>출석</th><th>숙제</th><th>상태</th></tr>';
+      enrolledNames.forEach(function(name){
+        var r = recs[name] || {};
+        var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
+        var hw = r.homework ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
+        var ok = (r.attended || r.homework);
+        var closed = isSessionClosed(ses);
+        var status = !closed ? '<span style="color:var(--muted);font-size:11px">진행중</span>'
+                   : ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-1만원</span>';
+        html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td><td>'+status+'</td></tr>';
+      });
+      html += '</table></div>';
+    }
+    html += '</div>';
+  });
+  app.innerHTML = html;
+}
+
+function renderAdminSettle(app){
+  // 강사별 × 과목별 보증금 정산
+  var rows = {}; // name -> {subject -> remain}
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(!rows[e.name]) rows[e.name] = {};
+    rows[e.name][e.subject] = calcDeposit(e.name, e.subject);
+  });
+  var names = Object.keys(rows);
+
+  var html = '<div class="section-title">보증금 정산표</div>';
+  if(!names.length){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
+
+  var totalDeposit = 0, totalRemain = 0;
+  names.forEach(function(n){
+    Object.keys(rows[n]).forEach(function(s){
+      totalDeposit += DEPOSIT; totalRemain += rows[n][s];
+    });
+  });
+
+  html += '<div class="stat-grid">';
+  html += '<div class="stat"><div class="label">총 보증금</div><div class="num">'+won(totalDeposit)+'</div></div>';
+  html += '<div class="stat"><div class="label">총 환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">차감 합계 '+won(totalDeposit-totalRemain)+'</div></div>';
+  html += '</div>';
+
+  html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사</th><th>과목</th><th>보증금</th><th>차감</th><th>환급액</th></tr>';
+  names.forEach(function(n){
+    var subjects = Object.keys(rows[n]);
+    subjects.forEach(function(s, i){
+      var remain = rows[n][s];
+      var deduct = DEPOSIT - remain;
+      html += '<tr>';
+      if(i===0) html += '<td class="name" rowspan="'+subjects.length+'">'+n+'</td>';
+      html += '<td>'+s+'</td><td>'+won(DEPOSIT)+'</td>'+
+        '<td style="color:'+(deduct>0?'var(--danger)':'var(--muted)')+'">'+(deduct>0?'-'+won(deduct):'-')+'</td>'+
+        '<td style="font-weight:800;color:var(--point)">'+won(remain)+'</td></tr>';
+    });
+  });
+  html += '</table></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 종료된 스터디만 정산에 반영됩니다.<br>※ 출석 또는 숙제 중 하나만 인증해도 차감되지 않습니다.</div>';
+  app.innerHTML = html;
+}
+
+// ===== 시작 =====
+loadAll(function(){ buildTabs(); });
+</script>
+</body>
+</html>

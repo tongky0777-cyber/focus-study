@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a2d23">
+<link rel="manifest" href="manifest.json">
+<title>포커스 수학연구팀 스터디</title>
+<style>
+  :root{
+    --main:#1a2d23; --point:#16825a; --point2:#0f6e56;
+    --bg:#f4f6f5; --white:#fff; --ink:#1a2d23; --ink2:#555;
+    --muted:#999; --line:#e5e8e6; --danger:#c0392b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
+  .topbar{background:var(--main);color:#fff;padding:16px 20px;display:flex;align-items:center;gap:10px;}
+  .topbar .brand{font-size:15px;font-weight:800;}
+  .topbar .brand small{display:block;font-size:11px;font-weight:400;color:rgba(255,255,255,.6);margin-top:2px;}
+  .wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 20px;}
+  .card{background:var(--white);border-radius:16px;border:1px solid var(--line);width:100%;max-width:380px;padding:28px 24px;}
+  .card h1{font-size:20px;font-weight:800;margin-bottom:6px;color:var(--main);}
+  .card .sub{font-size:13px;color:var(--muted);margin-bottom:24px;}
+  .tabs{display:flex;background:var(--bg);border-radius:10px;padding:4px;margin-bottom:22px;}
+  .tab{flex:1;text-align:center;padding:10px;font-size:14px;font-weight:700;border-radius:7px;cursor:pointer;color:var(--muted);transition:.15s;}
+  .tab.on{background:var(--white);color:var(--main);box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:6px;}
+  .field input{width:100%;padding:13px 14px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);}
+  .field input:focus{outline:none;border-color:var(--point);background:var(--white);}
+  .field .hint{font-size:11px;color:var(--muted);margin-top:5px;}
+  .btn{width:100%;padding:14px;font-size:15px;font-weight:800;color:#fff;background:var(--point);border:none;border-radius:10px;cursor:pointer;transition:.15s;font-family:inherit;}
+  .btn:active{background:var(--point2);}
+  .btn:disabled{opacity:.5;}
+  .msg{text-align:center;font-size:13px;margin-top:14px;min-height:18px;}
+  .msg.error{color:var(--danger);}
+  .msg.ok{color:var(--point);}
+  .loading{text-align:center;padding:40px;color:var(--muted);}
+  .footer{text-align:center;padding:16px;font-size:11px;color:var(--muted);}
+  @media(min-width:768px){
+    .card{max-width:420px;padding:36px 32px;}
+    .card h1{font-size:24px;}
+  }
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">포커스 수학연구팀<small>강사 스터디 출석 · 보증금 관리</small></div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <h1 id="card-title">로그인</h1>
+    <div class="sub" id="card-sub">스터디 출석과 보증금을 관리하세요</div>
+
+    <div class="tabs">
+      <div class="tab on" id="tab-login" onclick="switchTab('login')">로그인</div>
+      <div class="tab" id="tab-signup" onclick="switchTab('signup')">회원가입</div>
+    </div>
+
+    <!-- 로그인 폼 -->
+    <div id="form-login">
+      <div class="field">
+        <label>이름</label>
+        <input id="login-name" type="text" placeholder="홍길동" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>전화번호 뒷 4자리</label>
+        <input id="login-phone" type="tel" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off">
+        <div class="hint">본인 확인용 (예: 010-1234-<b>5678</b> → 5678)</div>
+      </div>
+      <button class="btn" id="btn-login" onclick="doLogin()">로그인</button>
+      <div class="msg" id="login-msg"></div>
+    </div>
+
+    <!-- 회원가입 폼 -->
+    <div id="form-signup" style="display:none;">
+      <div class="field">
+        <label>이름</label>
+        <input id="signup-name" type="text" placeholder="홍길동" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>전화번호 뒷 4자리</label>
+        <input id="signup-phone" type="tel" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off">
+        <div class="hint">로그인 시 본인 확인에 사용됩니다</div>
+      </div>
+      <button class="btn" id="btn-signup" onclick="doSignup()">가입하기</button>
+      <div class="msg" id="signup-msg"></div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">포커스 수학연구팀 · 김병진 수학연구소</div>
+
+<script>
+// ===== Firebase 초기화 =====
+var firebaseConfig = {
+  apiKey: "AIzaSyDfQxi6q8xVUVgnvwON446Lnd-Becpwvbk",
+  authDomain: "kimbjmath.firebaseapp.com",
+  databaseURL: "https://kimbjmath-default-rtdb.firebaseio.com",
+  projectId: "kimbjmath",
+  storageBucket: "kimbjmath.firebasestorage.app",
+  messagingSenderId: "664889936709",
+  appId: "1:664889936709:web:2df1494b0cd978c64e4c2c"
+};
+if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
+// 데이터 경로: study_ 접두사로 기존 학원 데이터와 분리
+var USERS_REF = 'study_users';
+
+// 어드민 계정 (병진T) - 이 이름+전화번호로 가입하면 자동 어드민
+var ADMIN_NAME = '김병진';
+var ADMIN_PHONE = '0708'; // 병진T 어드민 전화번호 뒷 4자리
+
+// 이미 로그인되어 있으면 대시보드로
+if(localStorage.getItem('study_uid')){
+  // location.href = 'dashboard.html'; // 대시보드 만든 후 활성화
+}
+
+function switchTab(tab){
+  document.getElementById('tab-login').classList.toggle('on', tab==='login');
+  document.getElementById('tab-signup').classList.toggle('on', tab==='signup');
+  document.getElementById('form-login').style.display = tab==='login'?'block':'none';
+  document.getElementById('form-signup').style.display = tab==='signup'?'block':'none';
+  document.getElementById('card-title').textContent = tab==='login'?'로그인':'회원가입';
+}
+
+function showMsg(id, text, type){
+  var el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg ' + (type||'');
+}
+
+// 이름을 키로 안전하게 변환 (Firebase 키에 쓸 수 없는 문자 제거)
+function nameKey(name){
+  return name.trim().replace(/[.#$\[\]\/]/g, '_');
+}
+
+function doSignup(){
+  var name = document.getElementById('signup-name').value.trim();
+  var phone = document.getElementById('signup-phone').value.trim();
+
+  if(!name){ showMsg('signup-msg','이름을 입력해주세요','error'); return; }
+  if(!/^\d{4}$/.test(phone)){ showMsg('signup-msg','전화번호 뒷 4자리를 입력해주세요','error'); return; }
+
+  var btn = document.getElementById('btn-signup');
+  btn.disabled = true;
+  showMsg('signup-msg','확인 중...','');
+
+  var key = nameKey(name);
+  db.ref(USERS_REF + '/' + key).once('value', function(snap){
+    if(snap.exists()){
+      btn.disabled = false;
+      showMsg('signup-msg','이미 가입된 이름입니다. 로그인해주세요','error');
+      return;
+    }
+    var isAdmin = (name === ADMIN_NAME && phone === ADMIN_PHONE);
+    var user = {
+      name: name,
+      phone: phone,
+      role: isAdmin ? 'admin' : 'teacher',
+      createdAt: new Date().toISOString()
+    };
+    db.ref(USERS_REF + '/' + key).set(user, function(err){
+      btn.disabled = false;
+      if(err){ showMsg('signup-msg','가입 실패: 다시 시도해주세요','error'); return; }
+      showMsg('signup-msg','가입 완료! 로그인됩니다','ok');
+      localStorage.setItem('study_uid', key);
+      localStorage.setItem('study_name', name);
+      localStorage.setItem('study_role', user.role);
+      setTimeout(function(){ location.href = 'dashboard.html'; }, 800);
+    });
+  });
+}
+
+function doLogin(){
+  var name = document.getElementById('login-name').value.trim();
+  var phone = document.getElementById('login-phone').value.trim();
+
+  if(!name){ showMsg('login-msg','이름을 입력해주세요','error'); return; }
+  if(!/^\d{4}$/.test(phone)){ showMsg('login-msg','전화번호 뒷 4자리를 입력해주세요','error'); return; }
+
+  var btn = document.getElementById('btn-login');
+  btn.disabled = true;
+  showMsg('login-msg','로그인 중...','');
+
+  var key = nameKey(name);
+  db.ref(USERS_REF + '/' + key).once('value', function(snap){
+    btn.disabled = false;
+    if(!snap.exists()){
+      showMsg('login-msg','가입된 정보가 없습니다. 회원가입해주세요','error');
+      return;
+    }
+    var user = snap.val();
+    if(user.phone !== phone){
+      showMsg('login-msg','전화번호가 일치하지 않습니다','error');
+      return;
+    }
+    showMsg('login-msg','로그인 성공!','ok');
+    localStorage.setItem('study_uid', key);
+    localStorage.setItem('study_name', user.name);
+    localStorage.setItem('study_role', user.role || 'teacher');
+    setTimeout(function(){ location.href = 'dashboard.html'; }, 600);
+  });
+}
+
+// Enter 키로 제출
+document.getElementById('login-phone').addEventListener('keypress', function(e){ if(e.key==='Enter') doLogin(); });
+document.getElementById('signup-phone').addEventListener('keypress', function(e){ if(e.key==='Enter') doSignup(); });
+</script>
+</body>
+</html>
