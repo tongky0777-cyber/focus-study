@@ -553,12 +553,42 @@ function renderTeacherHw(app){
     var badge = state==='open' ? '<span class="badge-time open">인증 가능</span>'
               : state==='before' ? '<span class="badge-time before">예정</span>'
               : '<span class="badge-time closed">마감</span>';
+    // 같은 스터디에 숙제 올린 다른 선생님 수 (본인 제외)
+    var recs = DATA.records[ses.id] || {};
+    var othersCount = Object.keys(recs).filter(function(n){ return n !== MY_NAME && recs[n].homework; }).length;
+    // 본인이 인증했고, 다른 선생님 숙제가 있으면 보기 버튼
+    var peerBtn = (hw && othersCount > 0)
+      ? '<button class="act-btn" onclick="viewPeerHw(\''+ses.id+'\')">👥 다른 선생님 숙제 보기 ('+othersCount+'명)</button>'
+      : '';
     html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
       '<div class="meta">'+fmtDate(ses.date)+' · 마감 '+fmtDateTime(w.end)+'</div>'+
-      '<div class="sess-actions">'+btn+'</div></div>';
+      '<div class="sess-actions">'+btn+'</div>'+
+      (peerBtn ? '<div class="sess-actions" style="margin-top:8px;">'+peerBtn+'</div>' : '')+
+      '</div>';
   });
   app.innerHTML = html;
+}
+
+// 같은 스터디의 다른 선생님 숙제 사진 모아 보기
+function viewPeerHw(sid){
+  var recs = DATA.records[sid] || {};
+  var ses = DATA.sessions[sid] || {};
+  var blocks = [];
+  Object.keys(recs).forEach(function(name){
+    var r = recs[name];
+    if(!r.homework) return;
+    if(name === MY_NAME) return; // 본인 제외 (본인 건 내 숙제 보기로)
+    var photos = r.homeworkPhotos || (r.homeworkPhoto ? [r.homeworkPhoto] : []);
+    if(!photos.length) return;
+    var imgs = photos.map(function(p, i){
+      return '<img src="'+p+'" style="max-width:100%;border-radius:8px;margin-bottom:8px;">';
+    }).join('');
+    blocks.push('<div style="margin-bottom:24px;"><div style="color:#fff;font-family:sans-serif;font-size:15px;font-weight:bold;margin-bottom:8px;border-bottom:1px solid #444;padding-bottom:6px;">'+name+' ('+photos.length+'장)</div>'+imgs+'</div>');
+  });
+  if(!blocks.length){ toast('다른 선생님 숙제가 없습니다'); return; }
+  var w = window.open('','_blank');
+  w.document.write('<html><head><title>'+(ses.title||ses.subject)+' 숙제</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#222;padding:16px;"><div style="max-width:700px;margin:0 auto;"><h3 style="color:#fff;font-family:sans-serif;">다른 선생님 숙제</h3>'+blocks.join('')+'</div></body></html>');
 }
 
 var _hwSessionId = null;
