@@ -216,6 +216,24 @@
   </div>
 </div>
 
+<!-- 모달: 인증번호(뒷 4자리) 변경 -->
+<div class="modal-bg" id="modal-phone">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-phone')">×</button>
+    <h3>인증번호 변경</h3>
+    <div class="field">
+      <label>현재 뒷 4자리</label>
+      <input id="ph-cur" type="tel" maxlength="4" inputmode="numeric" placeholder="0000">
+    </div>
+    <div class="field">
+      <label>새 뒷 4자리</label>
+      <input id="ph-new" type="tel" maxlength="4" inputmode="numeric" placeholder="0000">
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">로그인할 때 쓰는 전화번호 뒷 4자리입니다.</div>
+    <button class="btn" onclick="savePhone()">변경하기</button>
+  </div>
+</div>
+
 <script>
 // ===== Firebase =====
 var firebaseConfig = {
@@ -769,6 +787,8 @@ function renderTeacherDeposit(app){
   html += '<div class="card"><div class="card-row"><div style="font-size:12px;font-weight:700;color:var(--ink2);">내 환급 계좌</div>'+
     '<button class="act-btn" style="flex:none;padding:6px 14px;" onclick="openAccountModal()">수정</button></div>'+
     '<div style="font-size:14px;font-weight:700;color:var(--main);margin-top:8px;">'+(myAccount||'<span style="color:var(--muted);font-weight:400;">등록된 계좌가 없습니다</span>')+'</div></div>';
+  html += '<div class="card"><div class="card-row"><div style="font-size:12px;font-weight:700;color:var(--ink2);">로그인 인증번호 (뒷 4자리)</div>'+
+    '<button class="act-btn" style="flex:none;padding:6px 14px;" onclick="openPhoneModal()">변경</button></div></div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6;">※ 종료된 스터디만 정산에 반영됩니다.<br>※ 출석 또는 숙제 중 하나만 인증해도 차감되지 않습니다.</div>';
   app.innerHTML = html;
 }
@@ -838,6 +858,29 @@ function saveAccount(){
     closeModal('modal-account');
     toast('환급 계좌가 수정되었습니다');
     renderView(CUR_VIEW);
+  });
+}
+
+// 인증번호(뒷 4자리) 변경
+function openPhoneModal(){
+  document.getElementById('ph-cur').value = '';
+  document.getElementById('ph-new').value = '';
+  openModal('modal-phone');
+}
+function savePhone(){
+  var cur = document.getElementById('ph-cur').value.trim();
+  var nw = document.getElementById('ph-new').value.trim();
+  var realCur = (DATA.users[UID] && DATA.users[UID].phone) || '';
+  if(!/^\d{4}$/.test(cur) || !/^\d{4}$/.test(nw)){ toast('4자리 숫자를 입력해주세요'); return; }
+  if(cur !== realCur){ toast('현재 번호가 일치하지 않습니다'); return; }
+  db.ref('study_users/'+UID+'/phone').set(nw, function(err){
+    if(err){ toast('변경 실패'); return; }
+    if(!DATA.users[UID]) DATA.users[UID] = {};
+    DATA.users[UID].phone = nw;
+    // 로그인 자동채움 값도 갱신
+    localStorage.setItem('study_last_phone', nw);
+    closeModal('modal-phone');
+    toast('인증번호가 변경되었습니다');
   });
 }
 
@@ -1180,6 +1223,7 @@ function renderAdminSettle(app){
   });
   html += '</table></div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 입금/환급의 "대기"를 누르면 "완료"로 바뀝니다.<br>※ 송금은 토스에서 직접 하고, 여기서 처리 상태만 기록하세요.<br>※ 종료된 스터디만 정산 금액에 반영됩니다.</div>';
+  html += '<button class="act-btn" style="margin-top:14px;" onclick="openPhoneModal()">내 로그인 인증번호 변경</button>';
   app.innerHTML = html;
 }
 

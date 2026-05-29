@@ -116,10 +116,18 @@ var USERS_REF = 'study_users';
 var ADMIN_NAME = '김병진';
 var ADMIN_PHONE = '0708'; // 병진T 어드민 전화번호 뒷 4자리
 
-// 이미 로그인되어 있으면 대시보드로
+// 이미 로그인되어 있으면 대시보드로 자동 이동
 if(localStorage.getItem('study_uid')){
-  // location.href = 'dashboard.html'; // 대시보드 만든 후 활성화
+  location.href = 'dashboard.html';
 }
+
+// 로그인이 풀렸어도 마지막 로그인 정보를 자동으로 채워줌
+window.addEventListener('DOMContentLoaded', function(){
+  var lastName = localStorage.getItem('study_last_name');
+  var lastPhone = localStorage.getItem('study_last_phone');
+  if(lastName){ var ln = document.getElementById('login-name'); if(ln) ln.value = lastName; }
+  if(lastPhone){ var lp = document.getElementById('login-phone'); if(lp) lp.value = lastPhone; }
+});
 
 function switchTab(tab){
   document.getElementById('tab-login').classList.toggle('on', tab==='login');
@@ -172,6 +180,8 @@ function doSignup(){
       localStorage.setItem('study_uid', key);
       localStorage.setItem('study_name', name);
       localStorage.setItem('study_role', user.role);
+      localStorage.setItem('study_last_name', name);
+      localStorage.setItem('study_last_phone', phone);
       setTimeout(function(){ location.href = 'dashboard.html'; }, 800);
     });
   });
@@ -204,6 +214,8 @@ function doLogin(){
     localStorage.setItem('study_uid', key);
     localStorage.setItem('study_name', user.name);
     localStorage.setItem('study_role', user.role || 'teacher');
+    localStorage.setItem('study_last_name', user.name);
+    localStorage.setItem('study_last_phone', phone);
     setTimeout(function(){ location.href = 'dashboard.html'; }, 600);
   });
 }
