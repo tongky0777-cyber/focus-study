@@ -849,16 +849,27 @@ function renderAdminStatus(app){
 
   var html = '<div class="section-title">스터디별 참여 현황</div>';
   if(!sessions.length){ html += '<div class="empty">개설된 스터디가 없습니다</div>'; app.innerHTML=html; return; }
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">스터디를 누르면 참여 현황이 펼쳐집니다</div>';
 
-  sessions.forEach(function(ses){
+  sessions.forEach(function(ses, idx){
     // 이 과목 신청자 목록
     var enrolledNames = [];
     Object.keys(DATA.enrollments).forEach(function(k){
       if(DATA.enrollments[k].subject === ses.subject) enrolledNames.push(DATA.enrollments[k].name);
     });
     var recs = DATA.records[ses.id] || {};
-    html += '<div class="card"><div class="card-row"><span class="subj">'+ses.subject+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
-    html += '<div class="title" style="font-size:14px;margin-bottom:8px;">'+(ses.title||ses.subject)+'</div>';
+    var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
+    var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
+    var rowId = 'status-detail-'+idx;
+
+    html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\',this)">';
+    html += '<div class="card-row"><span class="subj">'+ses.subject+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
+    html += '<div class="card-row" style="margin-top:4px;"><span class="title" style="font-size:14px;">'+(ses.title||ses.subject)+'</span>'+
+      '<span style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">신청 '+enrolledNames.length+'명 · 출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>';
+
+    // 상세 (기본 숨김)
+    html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
     if(!enrolledNames.length){
       html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
     } else {
@@ -878,9 +889,20 @@ function renderAdminStatus(app){
       });
       html += '</table></div>';
     }
-    html += '</div>';
+    html += '</div>';  // 상세 끝
+    html += '</div>';  // 카드 끝
   });
   app.innerHTML = html;
+}
+
+// 현황 카드 펼침/접힘 토글
+function toggleStatus(rowId, cardEl){
+  var detail = document.getElementById(rowId);
+  if(!detail) return;
+  var arrow = cardEl.querySelector('.card-row span:last-child');
+  var open = detail.style.display === 'none';
+  detail.style.display = open ? 'block' : 'none';
+  if(arrow) arrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
 }
 
 function renderAdminSettle(app){
