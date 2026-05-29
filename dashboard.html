@@ -460,14 +460,18 @@ function renderTeacherHome(app){
     totalRemain += calcDeposit(MY_NAME, e.subject);
   });
 
-  // 오늘/다가오는 세션 (내 신청 과목만)
+  // 다가오는 스터디 — 과목(스터디)별로 하나만, 가장 가까운 다음 회차 기준
   var mySubjects = enrolls.map(function(e){ return e.subject; });
-  var upcoming = [];
+  var nextBySubject = {};
   Object.keys(DATA.sessions).forEach(function(sid){
     var ses = DATA.sessions[sid];
     if(mySubjects.indexOf(ses.subject) < 0) return;
-    if(sessionTimeState(ses) !== 'closed') upcoming.push(Object.assign({id:sid}, ses));
+    if(sessionTimeState(ses) === 'closed') return; // 종료/마감 제외
+    var cur = nextBySubject[ses.subject];
+    // 가장 날짜가 빠른(곧 있을) 회차 1개만 유지
+    if(!cur || ses.date < cur.date) nextBySubject[ses.subject] = Object.assign({id:sid}, ses);
   });
+  var upcoming = Object.keys(nextBySubject).map(function(s){ return nextBySubject[s]; });
   upcoming.sort(function(a,b){ return a.date.localeCompare(b.date); });
 
   var html = '<div class="section-title">내 보증금 현황</div>';
@@ -487,7 +491,7 @@ function renderTeacherHome(app){
                 : '<span class="badge-time closed">출석 마감</span>';
       html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
         '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-        '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
+        '<div class="meta">다음 '+(roundLabel(ses)||'회차')+' · '+fmtDate(ses.date)+'</div>'+
         (ses.desc ? '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(ses.desc)+'</div>' : '')+
         '</div>';
     });
