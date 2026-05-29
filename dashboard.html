@@ -141,6 +141,10 @@
       <label>스터디 날짜</label>
       <input id="ses-date" type="date">
     </div>
+    <div class="field">
+      <label>스터디 정보 (선택)</label>
+      <textarea id="ses-desc" rows="4" placeholder="예) 범위, 준비물, 진행 방식, 숙제 분량 등 강사들에게 안내할 내용" style="width:100%;padding:12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);resize:vertical;"></textarea>
+    </div>
     <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
       <div style="font-size:12px;color:var(--point);font-weight:700;">인증 시간 안내 (자동 적용)</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.7;">
@@ -366,6 +370,7 @@ function fmtDate(d){
   return (dt.getMonth()+1)+'월 '+dt.getDate()+'일('+days[dt.getDay()]+')';
 }
 function won(n){ return n.toLocaleString('ko-KR') + '원'; }
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ===== 렌더링 라우터 =====
 function renderView(id){
@@ -426,7 +431,9 @@ function renderTeacherHome(app){
                 : '<span class="badge-time closed">출석 마감</span>';
       html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
         '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-        '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div></div>';
+        '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
+        (ses.desc ? '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(ses.desc)+'</div>' : '')+
+        '</div>';
     });
   }
 
@@ -767,6 +774,7 @@ function renderAdminHome(app){
     html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
       '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
+      (ses.desc ? '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(ses.desc)+'</div>' : '')+
       '<div class="meta" style="margin-top:6px;">출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>'+
       '<div class="sess-actions"><button class="act-btn" onclick="openEditSession(\''+ses.id+'\')">수정</button><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">삭제</button></div></div>';
   });
@@ -782,6 +790,7 @@ function openSessionModal(){
   document.getElementById('ses-subject').value = '';
   document.getElementById('ses-title').value = '';
   document.getElementById('ses-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ses-desc').value = '';
   openModal('modal-session');
 }
 
@@ -794,6 +803,7 @@ function openEditSession(sid){
   document.getElementById('ses-subject').value = ses.subject || '';
   document.getElementById('ses-title').value = ses.title || '';
   document.getElementById('ses-date').value = ses.date || '';
+  document.getElementById('ses-desc').value = ses.desc || '';
   openModal('modal-session');
 }
 
@@ -801,13 +811,14 @@ function saveSession(){
   var subject = document.getElementById('ses-subject').value.trim();
   var title = document.getElementById('ses-title').value.trim();
   var date = document.getElementById('ses-date').value;
+  var desc = document.getElementById('ses-desc').value.trim();
   if(!subject){ toast('과목을 입력해주세요'); return; }
   if(!date){ toast('날짜를 입력해주세요'); return; }
 
   if(_editSessionId){
     // 수정 모드 — 기존 createdAt 유지
     var old = DATA.sessions[_editSessionId] || {};
-    var upd = { subject:subject, title:title, date:date };
+    var upd = { subject:subject, title:title, date:date, desc:desc };
     db.ref('study_sessions/'+_editSessionId).update(upd, function(err){
       if(err){ toast('수정 실패'); return; }
       DATA.sessions[_editSessionId] = Object.assign(old, upd);
@@ -819,13 +830,14 @@ function saveSession(){
   } else {
     // 신규 개설
     var ref = db.ref('study_sessions').push();
-    var ses = { subject:subject, title:title, date:date, createdAt:new Date().toISOString() };
+    var ses = { subject:subject, title:title, date:date, desc:desc, createdAt:new Date().toISOString() };
     ref.set(ses, function(err){
       if(err){ toast('개설 실패'); return; }
       DATA.sessions[ref.key] = ses;
       closeModal('modal-session');
       document.getElementById('ses-subject').value='';
       document.getElementById('ses-title').value='';
+      document.getElementById('ses-desc').value='';
       toast('스터디 개설 완료!');
       showView('a-home');
     });
