@@ -138,17 +138,14 @@
       <input id="ses-title" type="text" placeholder="예) 3주차 함수의 연속">
     </div>
     <div class="field">
-      <label>날짜</label>
+      <label>스터디 날짜</label>
       <input id="ses-date" type="date">
     </div>
-    <div class="field-row">
-      <div class="field">
-        <label>출석 시작</label>
-        <input id="ses-start" type="time" value="19:00">
-      </div>
-      <div class="field">
-        <label>출석 마감</label>
-        <input id="ses-end" type="time" value="22:00">
+    <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
+      <div style="font-size:12px;color:var(--point);font-weight:700;">인증 시간 안내 (자동 적용)</div>
+      <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.7;">
+        · 출석: 당일 오전 <b>9:50 ~ 10:30</b><br>
+        · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b>
       </div>
     </div>
     <button class="btn" onclick="saveSession()">개설하기</button>
@@ -282,16 +279,64 @@ function calcDeposit(name, subject){
   return Math.max(0, DEPOSIT - deductions);
 }
 
-// 세션 시간 상태: 'before'|'open'|'closed'
-function sessionTimeState(ses){
-  var now = new Date();
-  var start = new Date(ses.date + 'T' + ses.start + ':00');
-  var end = new Date(ses.date + 'T' + ses.end + ':00');
-  if(now < start) return 'before';
-  if(now > end) return 'closed';
+// ===== 고정 시간 규칙 =====
+// 출석: 스터디 당일 09:50 ~ 10:30 (오프라인 출석)
+// 숙제: 스터디 당일 13:00 ~ 7일 후 새벽 01:00 (다음 스터디 전날)
+var ATTEND_START = '09:50';
+var ATTEND_END   = '10:30';
+var HW_START     = '13:00';
+var HW_END_HOUR  = 1;   // 7일 후 01:00
+var HW_DAYS      = 7;
+
+// 출석 인증 시간대 반환
+function attendWindow(ses){
+  var start = new Date(ses.date + 'T' + ATTEND_START + ':00');
+  var end   = new Date(ses.date + 'T' + ATTEND_END + ':00');
+  return {start:start, end:end};
+}
+// 숙제 인증 시간대 반환 (당일 13:00 ~ 7일 후 01:00)
+function hwWindow(ses){
+  var start = new Date(ses.date + 'T' + HW_START + ':00');
+  var end = new Date(ses.date + 'T00:00:00');
+  end.setDate(end.getDate() + HW_DAYS);
+  end.setHours(HW_END_HOUR, 0, 0, 0);
+  return {start:start, end:end};
+}
+
+// 출석 상태: 'before'|'open'|'closed'
+function attendState(ses){
+  var now = new Date(), w = attendWindow(ses);
+  if(now < w.start) return 'before';
+  if(now > w.end) return 'closed';
   return 'open';
 }
-function isSessionClosed(ses){ return sessionTimeState(ses) === 'closed'; }
+// 숙제 상태: 'before'|'open'|'closed'
+function hwState(ses){
+  var now = new Date(), w = hwWindow(ses);
+  if(now < w.start) return 'before';
+  if(now > w.end) return 'closed';
+  return 'open';
+}
+// 정산 대상 여부: 숙제 마감까지 지나야 최종 정산 (출석은 그 전에 끝나므로 숙제 마감 기준)
+function isSessionClosed(ses){ return hwState(ses) === 'closed'; }
+// 전체적으로 '진행 관련' 인지 (목록 노출용): 숙제 마감 안 지났으면 진행/예정
+function sessionTimeState(ses){
+  var now = new Date();
+  var hw = hwWindow(ses);
+  if(now > hw.end) return 'closed';
+  var a = attendWindow(ses);
+  if(now < a.start) return 'before';
+  return 'open';
+}
+
+// 시간 표시용 (HH:MM)
+function fmtTime(d){
+  return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+}
+// 날짜+시간 표시용 (M/D HH:MM)
+function fmtDateTime(d){
+  return (d.getMonth()+1)+'/'+d.getDate()+' '+fmtTime(d);
+}
 
 function fmtDate(d){
   var dt = new Date(d + 'T00:00:00');
@@ -340,7 +385,7 @@ function renderTeacherHome(app){
     if(mySubjects.indexOf(ses.subject) < 0) return;
     if(sessionTimeState(ses) !== 'closed') upcoming.push(Object.assign({id:sid}, ses));
   });
-  upcoming.sort(function(a,b){ return (a.date+a.start).localeCompare(b.date+b.start); });
+  upcoming.sort(function(a,b){ return a.date.localeCompare(b.date); });
 
   var html = '<div class="section-title">내 보증금 현황</div>';
   html += '<div class="stat-grid">';
@@ -353,13 +398,13 @@ function renderTeacherHome(app){
     html += '<div class="empty">예정된 스터디가 없습니다</div>';
   } else {
     upcoming.forEach(function(ses){
-      var state = sessionTimeState(ses);
-      var badge = state==='open' ? '<span class="badge-time open">출석 가능</span>'
-                : state==='before' ? '<span class="badge-time before">'+ses.start+' 시작</span>'
-                : '<span class="badge-time closed">마감</span>';
+      var aState = attendState(ses);
+      var badge = aState==='open' ? '<span class="badge-time open">출석 가능</span>'
+                : aState==='before' ? '<span class="badge-time before">'+fmtDate(ses.date)+'</span>'
+                : '<span class="badge-time closed">출석 마감</span>';
       html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
         '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-        '<div class="meta">'+fmtDate(ses.date)+' · '+ses.start+'~'+ses.end+'</div></div>';
+        '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div></div>';
     });
   }
 
@@ -384,7 +429,7 @@ function renderTeacherAttend(app){
     if(mySubjects.indexOf(ses.subject) < 0) return;
     if(ses.date === today) todaySessions.push(Object.assign({id:sid}, ses));
   });
-  todaySessions.sort(function(a,b){ return a.start.localeCompare(b.start); });
+  todaySessions.sort(function(a,b){ return a.date.localeCompare(b.date); });
 
   var html = '<div class="section-title">오늘의 출석</div>';
   if(!mySubjects.length){
@@ -397,11 +442,11 @@ function renderTeacherAttend(app){
   }
 
   todaySessions.forEach(function(ses){
-    var state = sessionTimeState(ses);
+    var state = attendState(ses);
     var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
     var attended = !!rec.attended;
     var badge = state==='open' ? '<span class="badge-time open">출석 가능</span>'
-              : state==='before' ? '<span class="badge-time before">'+ses.start+' 시작</span>'
+              : state==='before' ? '<span class="badge-time before">'+ATTEND_START+' 시작</span>'
               : '<span class="badge-time closed">마감됨</span>';
     var btn;
     if(attended){
@@ -409,13 +454,13 @@ function renderTeacherAttend(app){
     } else if(state==='open'){
       btn = '<button class="act-btn active" onclick="checkAttend(\''+ses.id+'\')">출석 체크하기</button>';
     } else if(state==='before'){
-      btn = '<button class="act-btn disabled" disabled>'+ses.start+' 부터 가능</button>';
+      btn = '<button class="act-btn disabled" disabled>'+ATTEND_START+' 부터 가능</button>';
     } else {
       btn = '<button class="act-btn disabled" disabled>출석 마감</button>';
     }
     html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-      '<div class="meta">'+ses.start+'~'+ses.end+' 사이 출석 체크</div>'+
+      '<div class="meta">출석 인증: '+ATTEND_START+' ~ '+ATTEND_END+'</div>'+
       '<div class="sess-actions">'+btn+'</div></div>';
   });
   app.innerHTML = html;
@@ -423,7 +468,7 @@ function renderTeacherAttend(app){
 
 function checkAttend(sid){
   var ses = DATA.sessions[sid];
-  if(sessionTimeState(ses) !== 'open'){ toast('출석 가능 시간이 아닙니다'); return; }
+  if(attendState(ses) !== 'open'){ toast('출석 가능 시간이 아닙니다'); return; }
   var ref = db.ref('study_records/'+sid+'/'+UID);
   var now = new Date().toISOString();
   ref.update({ attended:true, attendedAt:now, name:MY_NAME }, function(err){
@@ -445,7 +490,7 @@ function renderTeacherHw(app){
     if(mySubjects.indexOf(ses.subject) < 0) return;
     sessions.push(Object.assign({id:sid}, ses));
   });
-  sessions.sort(function(a,b){ return (b.date+b.start).localeCompare(a.date+a.start); });
+  sessions.sort(function(a,b){ return b.date.localeCompare(a.date); });
 
   var html = '<div class="section-title">숙제 인증</div>';
   if(!mySubjects.length){
@@ -459,15 +504,24 @@ function renderTeacherHw(app){
   sessions.slice(0,10).forEach(function(ses){
     var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
     var hw = !!rec.homework;
+    var state = hwState(ses);
+    var w = hwWindow(ses);
     var btn;
     if(hw){
       btn = '<button class="act-btn done" onclick="viewHw(\''+ses.id+'\')">✓ 숙제 인증 완료<span class="ck">탭하여 보기</span></button>';
-    } else {
+    } else if(state==='open'){
       btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드</button>';
+    } else if(state==='before'){
+      btn = '<button class="act-btn disabled" disabled>'+HW_START+' 부터 가능</button>';
+    } else {
+      btn = '<button class="act-btn disabled" disabled>숙제 마감</button>';
     }
-    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span></div>'+
+    var badge = state==='open' ? '<span class="badge-time open">인증 가능</span>'
+              : state==='before' ? '<span class="badge-time before">예정</span>'
+              : '<span class="badge-time closed">마감</span>';
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-      '<div class="meta">'+fmtDate(ses.date)+'</div>'+
+      '<div class="meta">'+fmtDate(ses.date)+' · 마감 '+fmtDateTime(w.end)+'</div>'+
       '<div class="sess-actions">'+btn+'</div></div>';
   });
   app.innerHTML = html;
@@ -475,6 +529,7 @@ function renderTeacherHw(app){
 
 var _hwSessionId = null;
 function uploadHw(sid){
+  if(hwState(DATA.sessions[sid]) !== 'open'){ toast('숙제 인증 시간이 아닙니다'); return; }
   _hwSessionId = sid;
   var input = document.createElement('input');
   input.type = 'file'; input.accept = 'image/*';
@@ -601,7 +656,7 @@ function saveEnroll(){
 function renderAdminHome(app){
   var sessions = [];
   Object.keys(DATA.sessions).forEach(function(sid){ sessions.push(Object.assign({id:sid}, DATA.sessions[sid])); });
-  sessions.sort(function(a,b){ return (b.date+b.start).localeCompare(a.date+a.start); });
+  sessions.sort(function(a,b){ return b.date.localeCompare(a.date); });
 
   var html = '<button class="btn" onclick="openSessionModal()" style="margin-bottom:14px;">+ 스터디 개설</button>';
   html += '<div class="section-title">개설된 스터디</div>';
@@ -619,7 +674,7 @@ function renderAdminHome(app){
               : '<span class="badge-time closed">종료</span>';
     html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-      '<div class="meta">'+fmtDate(ses.date)+' · '+ses.start+'~'+ses.end+'</div>'+
+      '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
       '<div class="meta" style="margin-top:6px;">출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>'+
       '<div class="sess-actions"><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">삭제</button></div></div>';
   });
@@ -635,13 +690,10 @@ function saveSession(){
   var subject = document.getElementById('ses-subject').value.trim();
   var title = document.getElementById('ses-title').value.trim();
   var date = document.getElementById('ses-date').value;
-  var start = document.getElementById('ses-start').value;
-  var end = document.getElementById('ses-end').value;
   if(!subject){ toast('과목을 입력해주세요'); return; }
   if(!date){ toast('날짜를 입력해주세요'); return; }
-  if(start >= end){ toast('마감 시간이 시작보다 빨라요'); return; }
   var ref = db.ref('study_sessions').push();
-  var ses = { subject:subject, title:title, date:date, start:start, end:end, createdAt:new Date().toISOString() };
+  var ses = { subject:subject, title:title, date:date, createdAt:new Date().toISOString() };
   ref.set(ses, function(err){
     if(err){ toast('개설 실패'); return; }
     DATA.sessions[ref.key] = ses;
@@ -666,7 +718,7 @@ function deleteSession(sid){
 function renderAdminStatus(app){
   var sessions = [];
   Object.keys(DATA.sessions).forEach(function(sid){ sessions.push(Object.assign({id:sid}, DATA.sessions[sid])); });
-  sessions.sort(function(a,b){ return (b.date+b.start).localeCompare(a.date+a.start); });
+  sessions.sort(function(a,b){ return b.date.localeCompare(a.date); });
 
   var html = '<div class="section-title">스터디별 참여 현황</div>';
   if(!sessions.length){ html += '<div class="empty">개설된 스터디가 없습니다</div>'; app.innerHTML=html; return; }
