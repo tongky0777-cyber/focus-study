@@ -89,7 +89,7 @@
   /* 모달 */
   .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center;}
   .modal-bg.on{display:flex;}
-  .modal{background:var(--white);border-radius:18px 18px 0 0;width:100%;max-width:760px;padding:22px 20px 30px;max-height:85vh;overflow-y:auto;}
+  .modal{background:var(--white);border-radius:18px 18px 0 0;width:100%;max-width:760px;padding:22px 20px 30px;max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
   .modal h3{font-size:17px;font-weight:800;margin-bottom:16px;color:var(--main);}
   .modal-close{float:right;background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1;}
   @media(min-width:768px){
@@ -138,18 +138,24 @@
       <input id="ses-title" type="text" placeholder="예) 3주차 함수의 연속">
     </div>
     <div class="field">
-      <label>스터디 날짜</label>
+      <label>첫 회차 날짜</label>
       <input id="ses-date" type="date">
+    </div>
+    <div class="field">
+      <label>회차 수</label>
+      <input id="ses-count" type="number" min="1" max="20" value="5">
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;">첫 회차 날짜부터 매주 같은 요일로 자동 생성됩니다 (예: 5회차 = 5주 연속)</div>
     </div>
     <div class="field">
       <label>스터디 정보 (선택)</label>
       <textarea id="ses-desc" rows="4" placeholder="예) 범위, 준비물, 진행 방식, 숙제 분량 등 강사들에게 안내할 내용" style="width:100%;padding:12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);resize:vertical;"></textarea>
     </div>
     <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
-      <div style="font-size:12px;color:var(--point);font-weight:700;">인증 시간 안내 (자동 적용)</div>
+      <div style="font-size:12px;color:var(--point);font-weight:700;">자동 적용 안내</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.7;">
         · 출석: 당일 오전 <b>9:50 ~ 10:30</b><br>
-        · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b>
+        · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b><br>
+        · 보증금: <b>회차당 1만원</b> (5회차 = 5만원)
       </div>
     </div>
     <button class="btn" id="ses-save-btn" onclick="saveSession()">개설하기</button>
@@ -173,13 +179,15 @@
     <div class="card" style="background:var(--warn-bg);border-color:var(--warn);">
       <div style="font-size:13px;color:var(--warn);font-weight:700;">보증금 입금 계좌</div>
       <div style="font-size:14px;font-weight:800;color:var(--main);margin-top:5px;">토스뱅크 1000-6131-1749</div>
-      <div style="font-size:12px;color:var(--ink2);">예금주: 김병진 · 과목당 50,000원</div>
+      <div style="font-size:12px;color:var(--ink2);">예금주: 김병진</div>
+      <div id="enr-deposit-info" style="font-size:13px;color:var(--warn);font-weight:700;margin-top:6px;"></div>
     </div>
     <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
       <div style="font-size:13px;color:var(--point);font-weight:700;">보증금 안내</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.6;">
-        · 출석 또는 숙제 인증 시 차감 없음<br>
-        · 결석 + 숙제 미인증 시 1만원 차감
+        · 보증금은 회차당 1만원입니다<br>
+        · 매 회차 출석 또는 숙제 인증 시 차감 없음<br>
+        · 결석 + 숙제 미인증 시 회차당 1만원 차감
       </div>
     </div>
     <button class="btn" onclick="saveEnroll()">신청하기</button>
@@ -297,10 +305,22 @@ function showView(id){
 }
 
 // ===== 헬퍼: 차감 계산 =====
+// 특정 과목의 총 회차 수 (= 그 과목으로 개설된 세션 수)
+function subjectSessionCount(subject){
+  var n = 0;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    if(DATA.sessions[sid].subject === subject) n++;
+  });
+  return n;
+}
+// 특정 과목의 보증금 총액 (= 회차 수 × 1만원)
+function subjectDeposit(subject){
+  return subjectSessionCount(subject) * DEDUCT;
+}
 // 특정 강사의 특정 과목 보증금 잔액 계산
 function calcDeposit(name, subject){
   var deductions = 0;
-  // 해당 과목의 모든 세션을 찾아서, 출석X AND 숙제X면 차감
+  // 해당 과목의 모든 회차(세션)를 찾아서, 출석X AND 숙제X면 차감
   Object.keys(DATA.sessions).forEach(function(sid){
     var ses = DATA.sessions[sid];
     if(ses.subject !== subject) return;
@@ -311,7 +331,7 @@ function calcDeposit(name, subject){
     var hw = !!rec.homework;
     if(!attended && !hw) deductions += DEDUCT;
   });
-  return Math.max(0, DEPOSIT - deductions);
+  return Math.max(0, subjectDeposit(subject) - deductions);
 }
 
 // ===== 고정 시간 규칙 =====
@@ -380,6 +400,11 @@ function fmtDate(d){
 }
 function won(n){ return n.toLocaleString('ko-KR') + '원'; }
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// 회차 라벨 (예: "3/5회차"), 없으면 빈 문자열
+function roundLabel(ses){
+  if(ses.round && ses.totalRounds) return ses.round+'/'+ses.totalRounds+'회차';
+  return '';
+}
 
 // ===== 렌더링 라우터 =====
 function renderView(id){
@@ -409,7 +434,7 @@ function renderTeacherHome(app){
   var enrolls = myEnrollments();
   var totalDeposit = 0, totalRemain = 0;
   enrolls.forEach(function(e){
-    totalDeposit += DEPOSIT;
+    totalDeposit += subjectDeposit(e.subject);
     totalRemain += calcDeposit(MY_NAME, e.subject);
   });
 
@@ -496,7 +521,7 @@ function renderTeacherAttend(app){
     } else {
       btn = '<button class="act-btn disabled" disabled>출석 마감</button>';
     }
-    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+(roundLabel(ses)?' · '+roundLabel(ses):'')+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
       '<div class="meta">출석 인증: '+ATTEND_START+' ~ '+ATTEND_END+'</div>'+
       '<div class="sess-actions">'+btn+'</div></div>';
@@ -539,7 +564,7 @@ function renderTeacherHw(app){
     html += '<div class="empty">신청한 과목의 스터디가 없습니다</div>';
     app.innerHTML = html; return;
   }
-  sessions.slice(0,10).forEach(function(ses){
+  sessions.forEach(function(ses){
     var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
     var hw = !!rec.homework;
     var state = hwState(ses);
@@ -553,7 +578,7 @@ function renderTeacherHw(app){
         btn += '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">+ 사진 추가</button>';
       }
     } else if(state==='open'){
-      btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드</button>';
+      btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드 (여러 장 가능)</button>';
     } else if(state==='before'){
       btn = '<button class="act-btn disabled" disabled>'+HW_START+' 부터 가능</button>';
     } else {
@@ -569,7 +594,7 @@ function renderTeacherHw(app){
     var peerBtn = (hw && othersCount > 0)
       ? '<button class="act-btn" onclick="viewPeerHw(\''+ses.id+'\')">👥 다른 선생님 숙제 보기 ('+othersCount+'명)</button>'
       : '';
-    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+(roundLabel(ses)?' · '+roundLabel(ses):'')+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
       '<div class="meta">'+fmtDate(ses.date)+' · 마감 '+fmtDateTime(w.end)+'</div>'+
       '<div class="sess-actions">'+btn+'</div>'+
@@ -673,13 +698,13 @@ function showPhotoModalGrouped(title, groups){
   openModal('modal-photo');
 }
 
-// 이미지 압축 (최대 1000px, JPEG 0.7)
+// 이미지 압축 (최대 900px, JPEG 0.6 — 숙제 사진 용량 최소화)
 function compressImage(file, cb){
   var reader = new FileReader();
   reader.onload = function(ev){
     var img = new Image();
     img.onload = function(){
-      var max = 1000;
+      var max = 900;
       var w = img.width, h = img.height;
       if(w > max || h > max){
         if(w > h){ h = h*max/w; w = max; } else { w = w*max/h; h = max; }
@@ -687,7 +712,7 @@ function compressImage(file, cb){
       var canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      cb(canvas.toDataURL('image/jpeg', 0.7));
+      cb(canvas.toDataURL('image/jpeg', 0.6));
     };
     img.src = ev.target.result;
   };
@@ -705,7 +730,9 @@ function renderTeacherDeposit(app){
   enrolls.forEach(function(e){
     var remain = calcDeposit(MY_NAME, e.subject);
     totalRemain += remain;
-    var deducted = DEPOSIT - remain;
+    var dep = subjectDeposit(e.subject);
+    var deducted = dep - remain;
+    var rounds = subjectSessionCount(e.subject);
     // 해당 과목 세션별 상세
     var detail = [];
     Object.keys(DATA.sessions).forEach(function(sid){
@@ -720,7 +747,7 @@ function renderTeacherDeposit(app){
 
     html += '<div class="card"><div class="card-row"><div style="font-size:14px;font-weight:800;">'+e.subject+'</div>'+
       '<div style="font-size:16px;font-weight:900;color:'+(deducted>0?'var(--danger)':'var(--point)')+';">'+won(remain)+'</div></div>';
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">보증금 '+won(DEPOSIT)+(deducted>0?' · 차감 '+won(deducted):'')+'</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">보증금 '+won(dep)+' ('+rounds+'회차)'+(deducted>0?' · 차감 '+won(deducted):'')+'</div>';
     // 입금/환급 상태 배지
     var paid = !!e.paid, refunded = !!e.refunded;
     html += '<div style="display:flex;gap:6px;margin-top:8px;">'+
@@ -746,6 +773,14 @@ function renderTeacherDeposit(app){
   app.innerHTML = html;
 }
 
+function updateEnrollDeposit(){
+  var subject = document.getElementById('enr-subject').value;
+  var info = document.getElementById('enr-deposit-info');
+  if(!subject || !info){ if(info) info.textContent=''; return; }
+  var rounds = subjectSessionCount(subject);
+  info.textContent = '입금할 보증금: ' + won(subjectDeposit(subject)) + ' (' + rounds + '회차)';
+}
+
 function openEnrollModal(){
   // 개설된 과목 목록에서 미신청 과목만
   var allSubjects = {};
@@ -758,9 +793,11 @@ function openEnrollModal(){
   } else {
     sel.innerHTML = avail.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
   }
+  sel.onchange = updateEnrollDeposit;
   // 기존에 입력한 환급 계좌가 있으면 채워넣기
   var myAccount = (DATA.users[UID] && DATA.users[UID].account) || '';
   document.getElementById('enr-account').value = myAccount;
+  updateEnrollDeposit();
   openModal('modal-enroll');
 }
 
@@ -770,7 +807,7 @@ function saveEnroll(){
   if(!subject){ toast('신청할 과목이 없습니다'); return; }
   if(!account){ toast('환급받을 계좌를 입력해주세요'); return; }
   var key = UID + '_' + subject.replace(/[.#$\[\]\/]/g,'_');
-  var enroll = { name:MY_NAME, subject:subject, deposit:DEPOSIT, enrolledAt:new Date().toISOString() };
+  var enroll = { name:MY_NAME, subject:subject, deposit:subjectDeposit(subject), enrolledAt:new Date().toISOString() };
   // 신청 정보 + 계좌(사용자 정보)를 함께 저장
   db.ref('study_enrollments/'+key).set(enroll, function(err){
     if(err){ toast('신청 실패'); return; }
@@ -824,7 +861,7 @@ function renderAdminHome(app){
     var badge = state==='open' ? '<span class="badge-time open">진행중</span>'
               : state==='before' ? '<span class="badge-time before">예정</span>'
               : '<span class="badge-time closed">종료</span>';
-    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
+    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+(roundLabel(ses)?' · '+roundLabel(ses):'')+'</span>'+badge+'</div>'+
       '<div class="title">'+(ses.title||ses.subject)+'</div>'+
       '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
       (ses.desc ? '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(ses.desc)+'</div>' : '')+
@@ -843,7 +880,9 @@ function openSessionModal(){
   document.getElementById('ses-subject').value = '';
   document.getElementById('ses-title').value = '';
   document.getElementById('ses-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('ses-count').value = '5';
   document.getElementById('ses-desc').value = '';
+  document.getElementById('ses-count').parentElement.style.display = 'block';
   openModal('modal-session');
 }
 
@@ -851,12 +890,14 @@ function openEditSession(sid){
   var ses = DATA.sessions[sid];
   if(!ses) return;
   _editSessionId = sid;
-  document.getElementById('ses-modal-title').textContent = '스터디 수정';
+  document.getElementById('ses-modal-title').textContent = '회차 수정';
   document.getElementById('ses-save-btn').textContent = '수정 저장';
   document.getElementById('ses-subject').value = ses.subject || '';
   document.getElementById('ses-title').value = ses.title || '';
   document.getElementById('ses-date').value = ses.date || '';
   document.getElementById('ses-desc').value = ses.desc || '';
+  // 수정 시에는 회차 수 칸 숨김 (개별 회차만 수정)
+  document.getElementById('ses-count').parentElement.style.display = 'none';
   openModal('modal-session');
 }
 
@@ -869,7 +910,7 @@ function saveSession(){
   if(!date){ toast('날짜를 입력해주세요'); return; }
 
   if(_editSessionId){
-    // 수정 모드 — 기존 createdAt 유지
+    // 수정 모드 — 해당 회차만 수정
     var old = DATA.sessions[_editSessionId] || {};
     var upd = { subject:subject, title:title, date:date, desc:desc };
     db.ref('study_sessions/'+_editSessionId).update(upd, function(err){
@@ -881,19 +922,38 @@ function saveSession(){
       showView('a-home');
     });
   } else {
-    // 신규 개설
-    var ref = db.ref('study_sessions').push();
-    var ses = { subject:subject, title:title, date:date, desc:desc, createdAt:new Date().toISOString() };
-    ref.set(ses, function(err){
-      if(err){ toast('개설 실패'); return; }
-      DATA.sessions[ref.key] = ses;
-      closeModal('modal-session');
-      document.getElementById('ses-subject').value='';
-      document.getElementById('ses-title').value='';
-      document.getElementById('ses-desc').value='';
-      toast('스터디 개설 완료!');
-      showView('a-home');
-    });
+    // 신규 개설 — 회차 수만큼 매주 같은 요일로 세션 생성
+    var count = parseInt(document.getElementById('ses-count').value, 10) || 1;
+    if(count < 1) count = 1;
+    if(count > 20) count = 20;
+    var groupId = 'g' + Date.now();
+    var baseDate = new Date(date + 'T00:00:00');
+    var saved = 0;
+    for(var i=0; i<count; i++){
+      var d = new Date(baseDate);
+      d.setDate(d.getDate() + i*7); // 매주 같은 요일
+      var dateStr = d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+      var ref = db.ref('study_sessions').push();
+      var ses = {
+        subject:subject, title:title, date:dateStr, desc:desc,
+        groupId:groupId, round:(i+1), totalRounds:count,
+        createdAt:new Date().toISOString()
+      };
+      (function(key, sesObj){
+        db.ref('study_sessions/'+key).set(sesObj, function(err){
+          if(!err){ DATA.sessions[key] = sesObj; }
+          saved++;
+          if(saved === count){
+            closeModal('modal-session');
+            document.getElementById('ses-subject').value='';
+            document.getElementById('ses-title').value='';
+            document.getElementById('ses-desc').value='';
+            toast(count + '개 회차 개설 완료!');
+            showView('a-home');
+          }
+        });
+      })(ref.key, ses);
+    }
   }
 }
 
@@ -928,7 +988,7 @@ function renderAdminStatus(app){
     var rowId = 'status-detail-'+idx;
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+ses.subject+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
+    html += '<div class="card-row"><span class="subj">'+ses.subject+(roundLabel(ses)?' · '+roundLabel(ses):'')+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
     html += '<div class="card-row" style="margin-top:4px;"><span class="title" style="font-size:14px;">'+(ses.title||ses.subject)+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">신청 '+enrolledNames.length+'명 · 출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>';
@@ -989,7 +1049,7 @@ function renderAdminSettle(app){
   Object.keys(DATA.enrollments).forEach(function(k){
     var e = DATA.enrollments[k];
     var remain = calcDeposit(e.name, e.subject);
-    if(e.paid) totalDeposit += DEPOSIT;       // 입금 확인된 것만 보증금에 합산
+    if(e.paid) totalDeposit += subjectDeposit(e.subject);  // 입금 확인된 것만 보증금에 합산
     if(e.refunded) totalRefunded += remain;    // 환급 완료
     else totalRemain += remain;                // 아직 환급 안 한 환급 예정액
   });
@@ -1005,7 +1065,7 @@ function renderAdminSettle(app){
     var acc = accountByName(n);
     subjects.forEach(function(s, i){
       var remain = rows[n][s];
-      var deduct = DEPOSIT - remain;
+      var deduct = subjectDeposit(s) - remain;
       var key = enrollKey(n, s);
       var enr = key ? DATA.enrollments[key] : {};
       var paid = !!enr.paid;
