@@ -528,6 +528,14 @@ function renderTeacherHw(app){
   }
   if(!sessions.length){
     html += '<div class="empty">스터디가 없습니다</div>';
+    // 진단 정보
+    var allSubj = {};
+    Object.keys(DATA.sessions).forEach(function(sid){ allSubj['['+DATA.sessions[sid].subject+']'] = true; });
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:14px;padding:12px;background:var(--bg);border-radius:8px;line-height:1.7;">'+
+      '<b>진단 정보</b><br>'+
+      '내 신청 과목: '+mySubjects.map(function(s){return '['+s+']';}).join(', ')+'<br>'+
+      '전체 스터디 과목: '+Object.keys(allSubj).join(', ')+'<br>'+
+      '<span style="color:var(--danger)">두 과목명이 똑같아야 숙제 탭에 표시됩니다</span></div>';
     app.innerHTML = html; return;
   }
   sessions.slice(0,10).forEach(function(ses){
