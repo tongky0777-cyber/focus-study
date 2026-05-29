@@ -843,32 +843,112 @@ function saveAccount(){
 
 // ============ 어드민 화면 ============
 function renderAdminHome(app){
-  var sessions = [];
-  Object.keys(DATA.sessions).forEach(function(sid){ sessions.push(Object.assign({id:sid}, DATA.sessions[sid])); });
-  sessions.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  // 회차들을 groupId로 묶기 (groupId 없으면 자기 자신을 그룹으로)
+  var groups = {};
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = Object.assign({id:sid}, DATA.sessions[sid]);
+    var gid = ses.groupId || ('single_'+sid);
+    if(!groups[gid]) groups[gid] = [];
+    groups[gid].push(ses);
+  });
+  // 각 그룹 내부는 회차 순으로 정렬
+  var groupList = Object.keys(groups).map(function(gid){
+    var arr = groups[gid];
+    arr.sort(function(a,b){ return (a.round||0)-(b.round||0) || a.date.localeCompare(b.date); });
+    return {gid:gid, sessions:arr};
+  });
+  // 그룹은 첫 회차 날짜 최신순
+  groupList.sort(function(a,b){ return b.sessions[0].date.localeCompare(a.sessions[0].date); });
 
   var html = '<button class="btn" onclick="openSessionModal()" style="margin-bottom:14px;">+ 스터디 개설</button>';
   html += '<div class="section-title">개설된 스터디</div>';
-  if(!sessions.length){
+  if(!groupList.length){
     html += '<div class="empty">개설된 스터디가 없습니다</div>';
     app.innerHTML = html; return;
   }
-  sessions.forEach(function(ses){
-    var state = sessionTimeState(ses);
-    var recs = DATA.records[ses.id] || {};
-    var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
-    var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
-    var badge = state==='open' ? '<span class="badge-time open">진행중</span>'
-              : state==='before' ? '<span class="badge-time before">예정</span>'
-              : '<span class="badge-time closed">종료</span>';
-    html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+(roundLabel(ses)?' · '+roundLabel(ses):'')+'</span>'+badge+'</div>'+
-      '<div class="title">'+(ses.title||ses.subject)+'</div>'+
-      '<div class="meta">'+fmtDate(ses.date)+' · 출석 '+ATTEND_START+'~'+ATTEND_END+'</div>'+
-      (ses.desc ? '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(ses.desc)+'</div>' : '')+
-      '<div class="meta" style="margin-top:6px;">출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>'+
-      '<div class="sess-actions"><button class="act-btn" onclick="openEditSession(\''+ses.id+'\')">수정</button><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">삭제</button></div></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">스터디를 누르면 회차별 현황이 펼쳐집니다</div>';
+
+  groupList.forEach(function(g, gi){
+    var first = g.sessions[0];
+    var total = g.sessions.length;
+    // 그룹 전체 누적 출석/숙제 인원 (회차 합산)
+    var rowId = 'admin-group-'+gi;
+    // 시작/끝 날짜
+    var dates = g.sessions.map(function(s){ return s.date; }).sort();
+    var rangeStr = fmtDate(dates[0]) + (total>1 ? ' ~ ' + fmtDate(dates[total-1]) : '');
+
+    html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
+    html += '<div class="card-row"><span class="subj">'+first.subject+'</span>'+
+      '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
+    html += '<div class="title" style="margin-top:2px;">'+(first.title||first.subject)+'</div>';
+    html += '<div class="meta" style="margin-top:4px;">'+total+'회차 · '+rangeStr+'</div>';
+    if(first.desc) html += '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(first.desc)+'</div>';
+
+    // 상세: 회차별 현황 (기본 숨김)
+    html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
+    g.sessions.forEach(function(ses){
+      var recs = DATA.records[ses.id] || {};
+      var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
+      var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
+      var state = sessionTimeState(ses);
+      var stBadge = state==='open' ? '<span class="badge-time open">진행중</span>'
+                  : state==='before' ? '<span class="badge-time before">예정</span>'
+                  : '<span class="badge-time closed">종료</span>';
+      html += '<div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px;">'+
+        '<div class="card-row"><span style="font-size:13px;font-weight:700;">'+(ses.round||'?')+'회차 · '+fmtDate(ses.date)+'</span>'+stBadge+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin:4px 0 6px;">출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>';
+      // 회차별 참여 강사 명단
+      var enrolledNames = [];
+      Object.keys(DATA.enrollments).forEach(function(k){
+        if(DATA.enrollments[k].subject === ses.subject) enrolledNames.push(DATA.enrollments[k].name);
+      });
+      if(enrolledNames.length){
+        html += '<div class="tbl-wrap"><table class="tbl"><tr><th>강사</th><th>출석</th><th>숙제</th></tr>';
+        enrolledNames.forEach(function(name){
+          var r = recs[name] || {};
+          var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
+          var pc = (r.homeworkPhotos ? r.homeworkPhotos.length : (r.homeworkPhoto ? 1 : 0));
+          var hw = r.homework
+            ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+pc+'장</span>'
+            : '<span class="pill x">X</span>';
+          html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td></tr>';
+        });
+        html += '</table></div>';
+      } else {
+        html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
+      }
+      html += '<div class="sess-actions" style="margin-top:8px;"><button class="act-btn" onclick="openEditSession(\''+ses.id+'\')">회차 수정</button><button class="act-btn" onclick="deleteSession(\''+ses.id+'\')" style="color:var(--danger);border-color:var(--danger-bg);">회차 삭제</button></div>';
+      html += '</div>';
+    });
+    // 그룹 전체 삭제
+    html += '<button class="act-btn" style="margin-top:12px;color:var(--danger);border-color:var(--danger-bg);" onclick="deleteGroup(\''+g.gid+'\')">스터디 전체 삭제 ('+total+'개 회차)</button>';
+    html += '</div>';  // 상세 끝
+    html += '</div>';  // 카드 끝
   });
   app.innerHTML = html;
+}
+
+// 그룹(스터디) 전체 삭제
+function deleteGroup(gid){
+  var ids = [];
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var g = DATA.sessions[sid].groupId || ('single_'+sid);
+    if(g === gid) ids.push(sid);
+  });
+  if(!ids.length) return;
+  if(!confirm('이 스터디의 '+ids.length+'개 회차를 모두 삭제할까요? 출석/숙제 기록도 함께 삭제됩니다.')) return;
+  var done = 0;
+  ids.forEach(function(sid){
+    db.ref('study_sessions/'+sid).remove();
+    db.ref('study_records/'+sid).remove();
+    delete DATA.sessions[sid];
+    delete DATA.records[sid];
+    done++;
+    if(done === ids.length){
+      toast('스터디 전체 삭제됨');
+      renderView(CUR_VIEW);
+    }
+  });
 }
 
 var _editSessionId = null; // 수정 중인 세션 id (null이면 신규 개설)
@@ -968,52 +1048,68 @@ function deleteSession(sid){
 }
 
 function renderAdminStatus(app){
-  var sessions = [];
-  Object.keys(DATA.sessions).forEach(function(sid){ sessions.push(Object.assign({id:sid}, DATA.sessions[sid])); });
-  sessions.sort(function(a,b){ return b.date.localeCompare(a.date); });
+  // 그룹으로 묶기
+  var groups = {};
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = Object.assign({id:sid}, DATA.sessions[sid]);
+    var gid = ses.groupId || ('single_'+sid);
+    if(!groups[gid]) groups[gid] = [];
+    groups[gid].push(ses);
+  });
+  var groupList = Object.keys(groups).map(function(gid){
+    var arr = groups[gid];
+    arr.sort(function(a,b){ return (a.round||0)-(b.round||0) || a.date.localeCompare(b.date); });
+    return {gid:gid, sessions:arr};
+  });
+  groupList.sort(function(a,b){ return b.sessions[0].date.localeCompare(a.sessions[0].date); });
 
   var html = '<div class="section-title">스터디별 참여 현황</div>';
-  if(!sessions.length){ html += '<div class="empty">개설된 스터디가 없습니다</div>'; app.innerHTML=html; return; }
-  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">스터디를 누르면 참여 현황이 펼쳐집니다</div>';
+  if(!groupList.length){ html += '<div class="empty">개설된 스터디가 없습니다</div>'; app.innerHTML=html; return; }
+  html += '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">스터디를 누르면 회차별 현황이 펼쳐집니다</div>';
 
-  sessions.forEach(function(ses, idx){
-    // 이 과목 신청자 목록
+  groupList.forEach(function(g, gi){
+    var first = g.sessions[0];
+    var rowId = 'status-group-'+gi;
+    // 신청자
     var enrolledNames = [];
     Object.keys(DATA.enrollments).forEach(function(k){
-      if(DATA.enrollments[k].subject === ses.subject) enrolledNames.push(DATA.enrollments[k].name);
+      if(DATA.enrollments[k].subject === first.subject) enrolledNames.push(DATA.enrollments[k].name);
     });
-    var recs = DATA.records[ses.id] || {};
-    var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
-    var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
-    var rowId = 'status-detail-'+idx;
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+ses.subject+(roundLabel(ses)?' · '+roundLabel(ses):'')+'</span><span style="font-size:11px;color:var(--muted)">'+fmtDate(ses.date)+'</span></div>';
-    html += '<div class="card-row" style="margin-top:4px;"><span class="title" style="font-size:14px;">'+(ses.title||ses.subject)+'</span>'+
+    html += '<div class="card-row"><span class="subj">'+first.subject+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
-    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">신청 '+enrolledNames.length+'명 · 출석 '+attendCount+'명 · 숙제 '+hwCount+'명</div>';
+    html += '<div class="title" style="font-size:14px;margin-top:2px;">'+(first.title||first.subject)+'</div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · 신청 '+enrolledNames.length+'명</div>';
 
-    // 상세 (기본 숨김)
     html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
-    if(!enrolledNames.length){
-      html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
-    } else {
-      html += '<div class="tbl-wrap"><table class="tbl"><tr><th>강사</th><th>출석</th><th>숙제</th><th>상태</th></tr>';
-      enrolledNames.forEach(function(name){
-        var r = recs[name] || {};
-        var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
-        var photoCount = (r.homeworkPhotos ? r.homeworkPhotos.length : (r.homeworkPhoto ? 1 : 0));
-        var hw = r.homework
-          ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+photoCount+'장</span>'
-          : '<span class="pill x">X</span>';
-        var ok = (r.attended || r.homework);
-        var closed = isSessionClosed(ses);
-        var status = !closed ? '<span style="color:var(--muted);font-size:11px">진행중</span>'
-                   : ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-1만원</span>';
-        html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td><td>'+status+'</td></tr>';
-      });
-      html += '</table></div>';
-    }
+    g.sessions.forEach(function(ses){
+      var recs = DATA.records[ses.id] || {};
+      var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
+      var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
+      html += '<div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px;">'+
+        '<div style="font-size:13px;font-weight:700;margin-bottom:6px;">'+(ses.round||'?')+'회차 · '+fmtDate(ses.date)+' <span style="font-weight:400;color:var(--muted);font-size:11px;">(출석 '+attendCount+' · 숙제 '+hwCount+')</span></div>';
+      if(!enrolledNames.length){
+        html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
+      } else {
+        html += '<div class="tbl-wrap"><table class="tbl"><tr><th>강사</th><th>출석</th><th>숙제</th><th>상태</th></tr>';
+        enrolledNames.forEach(function(name){
+          var r = recs[name] || {};
+          var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
+          var photoCount = (r.homeworkPhotos ? r.homeworkPhotos.length : (r.homeworkPhoto ? 1 : 0));
+          var hw = r.homework
+            ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+photoCount+'장</span>'
+            : '<span class="pill x">X</span>';
+          var ok = (r.attended || r.homework);
+          var closed = isSessionClosed(ses);
+          var status = !closed ? '<span style="color:var(--muted);font-size:11px">진행중</span>'
+                     : ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-1만원</span>';
+          html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td><td>'+status+'</td></tr>';
+        });
+        html += '</table></div>';
+      }
+      html += '</div>';
+    });
     html += '</div>';  // 상세 끝
     html += '</div>';  // 카드 끝
   });
