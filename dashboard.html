@@ -161,15 +161,37 @@
       <label>신청할 과목</label>
       <select id="enr-subject"></select>
     </div>
+    <div class="field">
+      <label>환급받을 계좌 (본인 계좌)</label>
+      <input id="enr-account" type="text" placeholder="예) 카카오뱅크 3333-01-1234567 홍길동">
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;">스터디 종료 후 이 계좌로 보증금이 환급됩니다</div>
+    </div>
+    <div class="card" style="background:var(--warn-bg);border-color:var(--warn);">
+      <div style="font-size:13px;color:var(--warn);font-weight:700;">보증금 입금 계좌</div>
+      <div style="font-size:14px;font-weight:800;color:var(--main);margin-top:5px;">토스뱅크 1000-6131-1749</div>
+      <div style="font-size:12px;color:var(--ink2);">예금주: 김병진 · 과목당 50,000원</div>
+    </div>
     <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
       <div style="font-size:13px;color:var(--point);font-weight:700;">보증금 안내</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.6;">
-        · 과목당 보증금 50,000원<br>
         · 출석 또는 숙제 인증 시 차감 없음<br>
         · 결석 + 숙제 미인증 시 1만원 차감
       </div>
     </div>
-    <button class="btn" onclick="saveEnroll()">신청하기 (보증금 5만원)</button>
+    <button class="btn" onclick="saveEnroll()">신청하기</button>
+  </div>
+</div>
+
+<!-- 모달: 환급 계좌 수정 (강사) -->
+<div class="modal-bg" id="modal-account">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-account')">×</button>
+    <h3>환급 계좌 수정</h3>
+    <div class="field">
+      <label>환급받을 계좌</label>
+      <input id="acc-input" type="text" placeholder="예) 카카오뱅크 3333-01-1234567 홍길동">
+    </div>
+    <button class="btn" onclick="saveAccount()">저장</button>
   </div>
 </div>
 
@@ -575,11 +597,25 @@ function viewHw(sid){
   var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
+  openPhotoWindow(photos, MY_NAME);
+}
+
+// 어드민: 특정 강사의 숙제 사진 보기
+function viewHwAdmin(sid, encodedName){
+  var name = decodeURIComponent(encodedName);
+  var rec = (DATA.records[sid] && DATA.records[sid][name]) || {};
+  var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
+  if(!photos.length){ toast('사진이 없습니다'); return; }
+  openPhotoWindow(photos, name);
+}
+
+// 사진 새 창으로 보기
+function openPhotoWindow(photos, name){
   var imgs = photos.map(function(p, i){
     return '<div style="margin-bottom:16px;"><div style="color:#aaa;font-size:13px;margin-bottom:6px;">'+(i+1)+' / '+photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;"></div>';
   }).join('');
   var w = window.open('','_blank');
-  w.document.write('<html><head><title>숙제 인증 ('+photos.length+'장)</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#222;padding:16px;"><div style="max-width:700px;margin:0 auto;">'+imgs+'</div></body></html>');
+  w.document.write('<html><head><title>'+name+' 숙제 ('+photos.length+'장)</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#222;padding:16px;"><div style="max-width:700px;margin:0 auto;"><h3 style="color:#fff;font-family:sans-serif;">'+name+' 숙제</h3>'+imgs+'</div></body></html>');
 }
 
 // 이미지 압축 (최대 1000px, JPEG 0.7)
@@ -641,7 +677,12 @@ function renderTeacherDeposit(app){
     }
     html += '</div>';
   });
+  var myAccount = (DATA.users[UID] && DATA.users[UID].account) || '';
   html = '<div class="stat-grid"><div class="stat" style="grid-column:1/-1;"><div class="label">총 예상 환급액</div><div class="num point">'+won(totalRemain)+'</div></div></div>' + html;
+  html += '<div class="card"><div class="card-row"><div style="font-size:12px;font-weight:700;color:var(--ink2);">내 환급 계좌</div>'+
+    '<button class="act-btn" style="flex:none;padding:6px 14px;" onclick="openAccountModal()">수정</button></div>'+
+    '<div style="font-size:14px;font-weight:700;color:var(--main);margin-top:8px;">'+(myAccount||'<span style="color:var(--muted);font-weight:400;">등록된 계좌가 없습니다</span>')+'</div></div>';
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6;">※ 종료된 스터디만 정산에 반영됩니다.<br>※ 출석 또는 숙제 중 하나만 인증해도 차감되지 않습니다.</div>';
   app.innerHTML = html;
 }
 
@@ -657,20 +698,49 @@ function openEnrollModal(){
   } else {
     sel.innerHTML = avail.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
   }
+  // 기존에 입력한 환급 계좌가 있으면 채워넣기
+  var myAccount = (DATA.users[UID] && DATA.users[UID].account) || '';
+  document.getElementById('enr-account').value = myAccount;
   openModal('modal-enroll');
 }
 
 function saveEnroll(){
   var subject = document.getElementById('enr-subject').value;
+  var account = document.getElementById('enr-account').value.trim();
   if(!subject){ toast('신청할 과목이 없습니다'); return; }
+  if(!account){ toast('환급받을 계좌를 입력해주세요'); return; }
   var key = UID + '_' + subject.replace(/[.#$\[\]\/]/g,'_');
   var enroll = { name:MY_NAME, subject:subject, deposit:DEPOSIT, enrolledAt:new Date().toISOString() };
+  // 신청 정보 + 계좌(사용자 정보)를 함께 저장
   db.ref('study_enrollments/'+key).set(enroll, function(err){
     if(err){ toast('신청 실패'); return; }
     DATA.enrollments[key] = enroll;
-    closeModal('modal-enroll');
-    toast('스터디 신청 완료! 💰');
-    showView('t-home');
+    db.ref('study_users/'+UID+'/account').set(account, function(){
+      if(!DATA.users[UID]) DATA.users[UID] = {};
+      DATA.users[UID].account = account;
+      closeModal('modal-enroll');
+      toast('스터디 신청 완료! 💰');
+      showView('t-home');
+    });
+  });
+}
+
+// 환급 계좌 수정
+function openAccountModal(){
+  var myAccount = (DATA.users[UID] && DATA.users[UID].account) || '';
+  document.getElementById('acc-input').value = myAccount;
+  openModal('modal-account');
+}
+function saveAccount(){
+  var account = document.getElementById('acc-input').value.trim();
+  if(!account){ toast('계좌를 입력해주세요'); return; }
+  db.ref('study_users/'+UID+'/account').set(account, function(err){
+    if(err){ toast('저장 실패'); return; }
+    if(!DATA.users[UID]) DATA.users[UID] = {};
+    DATA.users[UID].account = account;
+    closeModal('modal-account');
+    toast('환급 계좌가 수정되었습니다');
+    renderView(CUR_VIEW);
   });
 }
 
@@ -796,7 +866,10 @@ function renderAdminStatus(app){
       enrolledNames.forEach(function(name){
         var r = recs[name] || {};
         var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
-        var hw = r.homework ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
+        var photoCount = (r.homeworkPhotos ? r.homeworkPhotos.length : (r.homeworkPhoto ? 1 : 0));
+        var hw = r.homework
+          ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+photoCount+'장</span>'
+          : '<span class="pill x">X</span>';
         var ok = (r.attended || r.homework);
         var closed = isSessionClosed(ses);
         var status = !closed ? '<span style="color:var(--muted);font-size:11px">진행중</span>'
@@ -835,22 +908,35 @@ function renderAdminSettle(app){
   html += '<div class="stat"><div class="label">총 환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">차감 합계 '+won(totalDeposit-totalRemain)+'</div></div>';
   html += '</div>';
 
-  html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사</th><th>과목</th><th>보증금</th><th>차감</th><th>환급액</th></tr>';
+  html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사</th><th>과목</th><th>차감</th><th>환급액</th></tr>';
   names.forEach(function(n){
     var subjects = Object.keys(rows[n]);
+    var acc = accountByName(n);
     subjects.forEach(function(s, i){
       var remain = rows[n][s];
       var deduct = DEPOSIT - remain;
       html += '<tr>';
       if(i===0) html += '<td class="name" rowspan="'+subjects.length+'">'+n+'</td>';
-      html += '<td>'+s+'</td><td>'+won(DEPOSIT)+'</td>'+
+      html += '<td>'+s+'</td>'+
         '<td style="color:'+(deduct>0?'var(--danger)':'var(--muted)')+'">'+(deduct>0?'-'+won(deduct):'-')+'</td>'+
         '<td style="font-weight:800;color:var(--point)">'+won(remain)+'</td></tr>';
     });
+    // 강사별 환급 계좌 행
+    html += '<tr><td colspan="4" style="text-align:left;background:var(--bg);font-size:11px;color:var(--ink2);padding:6px 10px;">💳 '+(acc||'<span style="color:var(--muted)">환급 계좌 미등록</span>')+'</td></tr>';
   });
   html += '</table></div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 종료된 스터디만 정산에 반영됩니다.<br>※ 출석 또는 숙제 중 하나만 인증해도 차감되지 않습니다.</div>';
   app.innerHTML = html;
+}
+
+// 강사 이름으로 환급 계좌 찾기
+function accountByName(name){
+  var found = '';
+  Object.keys(DATA.users).forEach(function(uid){
+    var u = DATA.users[uid];
+    if(u && u.name === name && u.account) found = u.account;
+  });
+  return found;
 }
 
 // ===== 시작 =====
