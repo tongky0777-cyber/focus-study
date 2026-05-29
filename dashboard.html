@@ -983,16 +983,20 @@ function renderAdminSettle(app){
   var html = '<div class="section-title">보증금 정산표</div>';
   if(!names.length){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
 
-  var totalDeposit = 0, totalRemain = 0;
-  names.forEach(function(n){
-    Object.keys(rows[n]).forEach(function(s){
-      totalDeposit += DEPOSIT; totalRemain += rows[n][s];
-    });
+  var totalDeposit = 0;    // 입금 확인된 보증금 합계
+  var totalRemain = 0;     // 아직 환급 안 한 환급 예정액
+  var totalRefunded = 0;   // 환급 완료된 금액
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    var remain = calcDeposit(e.name, e.subject);
+    if(e.paid) totalDeposit += DEPOSIT;       // 입금 확인된 것만 보증금에 합산
+    if(e.refunded) totalRefunded += remain;    // 환급 완료
+    else totalRemain += remain;                // 아직 환급 안 한 환급 예정액
   });
 
   html += '<div class="stat-grid">';
-  html += '<div class="stat"><div class="label">총 보증금</div><div class="num">'+won(totalDeposit)+'</div></div>';
-  html += '<div class="stat"><div class="label">총 환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">차감 합계 '+won(totalDeposit-totalRemain)+'</div></div>';
+  html += '<div class="stat"><div class="label">입금된 보증금</div><div class="num">'+won(totalDeposit)+'</div></div>';
+  html += '<div class="stat"><div class="label">환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">환급 완료 '+won(totalRefunded)+'</div></div>';
   html += '</div>';
 
   html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사 / 과목</th><th>환급액</th><th>입금</th><th>환급</th></tr>';
@@ -1008,8 +1012,11 @@ function renderAdminSettle(app){
       var refunded = !!enr.refunded;
       var paidBtn = '<span class="pill '+(paid?'o':'x')+'" style="cursor:pointer" onclick="togglePaid(\''+encodeURIComponent(n)+'\',\''+encodeURIComponent(s)+'\')">'+(paid?'완료':'대기')+'</span>';
       var refBtn = '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer" onclick="toggleRefunded(\''+encodeURIComponent(n)+'\',\''+encodeURIComponent(s)+'\')">'+(refunded?'완료':'대기')+'</span>';
+      var remainCell = refunded
+        ? '<span style="text-decoration:line-through;color:var(--muted)">'+won(remain)+'</span>'
+        : '<span style="font-weight:800;color:var(--point)">'+won(remain)+'</span>';
       html += '<tr><td class="name"><span style="color:var(--muted);font-size:11px">'+n+'</span><br>'+s+(deduct>0?' <span style="color:var(--danger);font-size:10px">(-'+won(deduct)+')</span>':'')+'</td>'+
-        '<td style="font-weight:800;color:var(--point)">'+won(remain)+'</td>'+
+        '<td>'+remainCell+'</td>'+
         '<td>'+paidBtn+'</td><td>'+refBtn+'</td></tr>';
     });
     // 강사별 환급 계좌 행
