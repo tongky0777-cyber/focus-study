@@ -575,12 +575,14 @@ function renderTeacherHw(app){
     if(mySubjects.indexOf(ses.subject) < 0) return;
     sessions.push(Object.assign({id:sid}, ses));
   });
-  // 진행중(인증가능/예정) 먼저, 마감/종료된 건 아래로. 그 안에서는 최신순
+  // 진행중(인증가능/예정) 먼저, 마감/종료된 건 아래로.
+  // 진행중인 것끼리는 마감 임박 순(날짜 빠른 순)이 위로, 마감된 건 최신순
   sessions.sort(function(a,b){
     var ca = (hwState(a)==='closed') ? 1 : 0;
     var cb = (hwState(b)==='closed') ? 1 : 0;
     if(ca !== cb) return ca - cb;
-    return b.date.localeCompare(a.date);
+    if(ca === 0) return a.date.localeCompare(b.date);  // 진행중: 빠른 날짜(곧 할 것)가 위
+    return b.date.localeCompare(a.date);               // 마감됨: 최신이 위
   });
 
   var html = '<div class="section-title">숙제 인증</div>';
