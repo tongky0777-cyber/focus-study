@@ -1084,7 +1084,8 @@ function renderAdminHome(app){
       html += '</div>';
     });
     // 그룹 전체 삭제
-    html += '<button class="act-btn" style="margin-top:12px;" onclick="toggleEndGroup(\''+g.gid+'\')">'+(groupEnded?'종료 해제':'스터디 종료하기')+'</button>';
+    html += '<button class="act-btn" style="margin-top:12px;" onclick="openEditGroup(\''+g.gid+'\')">✏️ 스터디 정보 수정 (전체 회차)</button>';
+    html += '<button class="act-btn" style="margin-top:8px;" onclick="toggleEndGroup(\''+g.gid+'\')">'+(groupEnded?'종료 해제':'스터디 종료하기')+'</button>';
     html += '<button class="act-btn" style="margin-top:8px;color:var(--danger);border-color:var(--danger-bg);" onclick="deleteGroup(\''+g.gid+'\')">스터디 전체 삭제 ('+total+'개 회차)</button>';
     html += '</div>';  // 상세 끝
     html += '</div>';  // 카드 끝
@@ -1145,6 +1146,7 @@ var _editSessionId = null; // 수정 중인 세션 id (null이면 신규 개설)
 
 function openSessionModal(){
   _editSessionId = null;
+  _editGroupId = null;
   document.getElementById('ses-modal-title').textContent = '스터디 개설';
   document.getElementById('ses-save-btn').textContent = '개설하기';
   document.getElementById('ses-subject').value = '';
@@ -1152,6 +1154,7 @@ function openSessionModal(){
   document.getElementById('ses-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('ses-count').value = '5';
   document.getElementById('ses-desc').value = '';
+  document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'block';
   openModal('modal-session');
 }
@@ -1160,18 +1163,22 @@ function openEditSession(sid){
   var ses = DATA.sessions[sid];
   if(!ses) return;
   _editSessionId = sid;
+  _editGroupId = null;
   document.getElementById('ses-modal-title').textContent = '회차 수정';
   document.getElementById('ses-save-btn').textContent = '수정 저장';
   document.getElementById('ses-subject').value = ses.subject || '';
   document.getElementById('ses-title').value = ses.title || '';
   document.getElementById('ses-date').value = ses.date || '';
   document.getElementById('ses-desc').value = ses.desc || '';
-  // 수정 시에는 회차 수 칸 숨김 (개별 회차만 수정)
+  // 회차 수정 시: 날짜는 보이고, 회차 수 칸만 숨김
+  document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'none';
   openModal('modal-session');
 }
 
 function saveSession(){
+  // 그룹 전체 수정 모드면 그쪽으로
+  if(_editGroupId){ saveEditGroup(); return; }
   var subject = document.getElementById('ses-subject').value.trim();
   var title = document.getElementById('ses-title').value.trim();
   var date = document.getElementById('ses-date').value;
@@ -1235,6 +1242,62 @@ function deleteSession(sid){
   delete DATA.records[sid];
   toast('삭제되었습니다');
   renderView(CUR_VIEW);
+}
+
+// ===== 스터디 전체(그룹) 정보 수정 — 제목·과목·설명을 모든 회차에 한 번에 적용 =====
+var _editGroupId = null;
+function openEditGroup(gid){
+  _editGroupId = gid;
+  // 그룹의 첫 회차에서 현재 정보 가져오기
+  var first = null;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var s = DATA.sessions[sid];
+    var g = s.groupId || ('single_'+sid);
+    if(g === gid && (!first || (s.round||0) < (first.round||0))) first = s;
+  });
+  if(!first) return;
+  document.getElementById('ses-modal-title').textContent = '스터디 정보 수정';
+  document.getElementById('ses-save-btn').textContent = '전체 저장';
+  document.getElementById('ses-subject').value = first.subject || '';
+  document.getElementById('ses-title').value = first.title || '';
+  document.getElementById('ses-date').value = first.date || '';
+  document.getElementById('ses-desc').value = first.desc || '';
+  // 날짜·회차수 칸 숨김 (전체 공통정보만 수정)
+  document.getElementById('ses-date').parentElement.style.display = 'none';
+  document.getElementById('ses-count').parentElement.style.display = 'none';
+  _editSessionId = null;
+  openModal('modal-session');
+}
+
+function saveEditGroup(){
+  var subject = document.getElementById('ses-subject').value.trim();
+  var title = document.getElementById('ses-title').value.trim();
+  var desc = document.getElementById('ses-desc').value.trim();
+  if(!subject){ toast('과목을 입력해주세요'); return; }
+  // 그룹의 모든 회차에 적용
+  var keys = [];
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var s = DATA.sessions[sid];
+    var g = s.groupId || ('single_'+sid);
+    if(g === _editGroupId) keys.push(sid);
+  });
+  if(!keys.length){ toast('스터디를 찾을 수 없습니다'); return; }
+  var done = 0, fail = false;
+  keys.forEach(function(sid){
+    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc }, function(err){
+      if(err) fail = true;
+      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc });
+      done++;
+      if(done === keys.length){
+        // 날짜 칸 다시 보이게 복구
+        document.getElementById('ses-date').parentElement.style.display = 'block';
+        closeModal('modal-session');
+        _editGroupId = null;
+        toast(fail ? '일부 저장 실패' : '스터디 정보를 수정했습니다');
+        showView('a-home');
+      }
+    });
+  });
 }
 
 function renderAdminStatus(app){
