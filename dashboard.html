@@ -642,7 +642,8 @@ function renderTeacherHw(app){
   app.innerHTML = html;
 }
 
-// 같은 스터디의 다른 선생님 숙제 사진 모아 보기
+// 같은 스터디의 다른 선생님 숙제 — 이름 버튼으로 먼저 보여주고, 누르면 그 선생님 사진만 표시
+var _peerGroups = {};   // sid -> [{name, photos}]
 function viewPeerHw(sid){
   var recs = DATA.records[sid] || {};
   var groups = [];
@@ -655,7 +656,36 @@ function viewPeerHw(sid){
     groups.push({name:name, photos:photos});
   });
   if(!groups.length){ toast('다른 선생님 숙제가 없습니다'); return; }
-  showPhotoModalGrouped('다른 선생님 숙제', groups);
+  _peerGroups[sid] = groups;
+  showPeerNameButtons(sid, groups);
+}
+
+// 선생님 이름 버튼 목록 모달
+function showPeerNameButtons(sid, groups){
+  document.getElementById('photo-title').textContent = '다른 선생님 숙제 ('+groups.length+'명)';
+  var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
+  groups.forEach(function(g, idx){
+    html += '<button class="act-btn" style="width:100%;justify-content:space-between;display:flex;align-items:center;padding:14px 16px;" onclick="showPeerPhotos(\''+sid+'\','+idx+')">'
+      + '<span style="font-weight:700;">👤 '+escapeHtml(g.name)+'</span>'
+      + '<span style="font-size:12px;color:var(--muted);">'+g.photos.length+'장 보기 ›</span>'
+      + '</button>';
+  });
+  html += '</div>';
+  document.getElementById('photo-body').innerHTML = html;
+  openModal('modal-photo');
+}
+
+// 특정 선생님 사진만 표시 (뒤로가기 버튼 포함)
+function showPeerPhotos(sid, idx){
+  var groups = _peerGroups[sid] || [];
+  var g = groups[idx];
+  if(!g){ return; }
+  document.getElementById('photo-title').textContent = g.name + ' 숙제 ('+g.photos.length+'장)';
+  var back = '<button class="act-btn" style="margin-bottom:14px;" onclick="showPeerNameButtons(\''+sid+'\',_peerGroups[\''+sid+'\'])">‹ 선생님 목록으로</button>';
+  var imgs = g.photos.map(function(p, i){
+    return '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+g.photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;"></div>';
+  }).join('');
+  document.getElementById('photo-body').innerHTML = back + imgs;
 }
 
 var _hwSessionId = null;
