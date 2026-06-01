@@ -500,10 +500,15 @@ function isSubjectEnded(subject){
 
 function renderTeacherHome(app){
   var enrolls = myEnrollments();
-  var totalDeposit = 0, totalRemain = 0;
+  var totalDeposit = 0, totalRemain = 0, totalRefunded = 0;
   enrolls.forEach(function(e){
     totalDeposit += subjectDeposit(e.subject);
-    totalRemain += calcDeposit(MY_NAME, e.subject);
+    var remain = calcDeposit(MY_NAME, e.subject);
+    if(e.refunded){
+      totalRefunded += remain;   // 이미 환급 완료된 건 예상액에서 제외
+    } else {
+      totalRemain += remain;     // 아직 환급 안 받은 것만 예상 환급액
+    }
   });
 
   // 다가오는 스터디 — 과목(스터디)별로 하나만, 가장 가까운 다음 회차 기준
@@ -530,7 +535,7 @@ function renderTeacherHome(app){
   var html = '<div class="section-title">내 보증금 현황</div>';
   html += '<div class="stat-grid">';
   html += '<div class="stat"><div class="label">신청 과목</div><div class="num">'+activeCount+'<span style="font-size:14px">개</span></div><div class="sub">진행중'+(endedCount>0?' · 종료 '+endedCount+'개':'')+'</div></div>';
-  html += '<div class="stat"><div class="label">예상 환급액</div><div class="num point">'+(totalRemain/10000)+'<span style="font-size:14px">만원</span></div><div class="sub">총 보증금 '+(totalDeposit/10000)+'만원</div></div>';
+  html += '<div class="stat"><div class="label">예상 환급액</div><div class="num point">'+(totalRemain/10000)+'<span style="font-size:14px">만원</span></div><div class="sub">총 보증금 '+(totalDeposit/10000)+'만원'+(totalRefunded>0?' · 환급완료 '+(totalRefunded/10000)+'만원':'')+'</div></div>';
   html += '</div>';
 
   html += '<div class="section-title">다가오는 스터디</div>';
