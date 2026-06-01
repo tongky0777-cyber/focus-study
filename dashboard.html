@@ -486,6 +486,18 @@ function myEnrollments(){
   return list;
 }
 
+// 과목(스터디)이 종료됐는지: 그 과목의 세션이 하나라도 진행중이면 진행중, 모두 ended면 종료
+function isSubjectEnded(subject){
+  var has = false, allEnded = true;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    has = true;
+    if(!ses.ended) allEnded = false;
+  });
+  return has && allEnded;
+}
+
 function renderTeacherHome(app){
   var enrolls = myEnrollments();
   var totalDeposit = 0, totalRemain = 0;
@@ -508,9 +520,16 @@ function renderTeacherHome(app){
   var upcoming = Object.keys(nextBySubject).map(function(s){ return nextBySubject[s]; });
   upcoming.sort(function(a,b){ return a.date.localeCompare(b.date); });
 
+  // 진행중 / 종료 과목 개수 분리
+  var activeCount = 0, endedCount = 0;
+  enrolls.forEach(function(e){
+    if(isSubjectEnded(e.subject)) endedCount++;
+    else activeCount++;
+  });
+
   var html = '<div class="section-title">내 보증금 현황</div>';
   html += '<div class="stat-grid">';
-  html += '<div class="stat"><div class="label">신청 과목</div><div class="num">'+enrolls.length+'<span style="font-size:14px">개</span></div></div>';
+  html += '<div class="stat"><div class="label">신청 과목</div><div class="num">'+activeCount+'<span style="font-size:14px">개</span></div><div class="sub">진행중'+(endedCount>0?' · 종료 '+endedCount+'개':'')+'</div></div>';
   html += '<div class="stat"><div class="label">예상 환급액</div><div class="num point">'+(totalRemain/10000)+'<span style="font-size:14px">만원</span></div><div class="sub">총 보증금 '+(totalDeposit/10000)+'만원</div></div>';
   html += '</div>';
 
