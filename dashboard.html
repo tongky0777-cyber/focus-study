@@ -1418,29 +1418,28 @@ function renderAdminSettle(app){
   var html = '<div class="section-title">보증금 정산표</div>';
   if(!names.length){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
 
-  var totalPaidAll = 0;    // 입금 확인된 보증금 전체 (벌금 계산용)
-  var depositRemaining = 0;// 입금됐는데 아직 환급/벌금으로 정리 안 된 금액 (처리 대기)
-  var totalRemain = 0;     // 아직 환급 안 한 환급 예정액
+  var totalPaidAll = 0;    // 실제 입금된 보증금 전체
+  var depositRemaining = 0;// 입금됐는데 아직 환급 안 된 금액
+  var totalRemain = 0;     // 환급 예정액 (입금된 것 중, 아직 환급 안 한 것)
   var totalRefunded = 0;   // 환급 완료된 금액
   Object.keys(DATA.enrollments).forEach(function(k){
     var e = DATA.enrollments[k];
-    var remain = calcDeposit(e.name, e.subject);       // 이 사람에게 돌려줄 환급액
-    var paidAmt = subjectDeposit(e.subject);           // 이 사람이 낸 보증금
-    if(e.paid){
-      totalPaidAll += paidAmt;
-      if(e.refunded){
-        // 환급 완료 → 환급액은 환급으로, 차액은 벌금으로 빠짐 → 입금 잔액에서 전부 제거
-        totalRefunded += remain;
-      } else {
-        // 아직 처리 안 됨 → 입금된 보증금에 그대로 남음
-        depositRemaining += paidAmt;
-      }
+    // 실제로 입금 확인된 사람만 돈 계산에 포함 (입금 대기는 0)
+    if(!e.paid) return;
+    var remain = calcDeposit(e.name, e.subject);       // 돌려줄 환급액 (결석/숙제 차감 반영됨)
+    var paidAmt = subjectDeposit(e.subject);           // 받은 보증금
+    totalPaidAll += paidAmt;
+    if(e.refunded){
+      totalRefunded += remain;       // 환급 완료
+    } else {
+      depositRemaining += paidAmt;   // 아직 환급 안 함 → 보유 중
+      totalRemain += remain;         // 환급 예정
     }
-    if(!e.refunded) totalRemain += remain;             // 아직 환급 안 한 환급 예정액
   });
 
-  // 벌금 = 입금 전체 − 환급 완료액. 여기서 사용한 벌금을 빼면 벌금 잔액
-  var finePool = totalPaidAll - totalRefunded;   // 모인 벌금(환급 후 남은 차액)
+  // 벌금 = 받은 보증금 − 환급 예정(아직 환급 안 한 것) − 환급 완료액
+  // = 결석/숙제 미인증으로 깎인 차액의 합. 입금된 사람만 대상.
+  var finePool = totalPaidAll - totalRemain - totalRefunded;   // 모인 벌금(환급 후 남은 차액)
   var fineUsed = 0;
   Object.keys(DATA.fines).forEach(function(fk){
     var f = DATA.fines[fk];
