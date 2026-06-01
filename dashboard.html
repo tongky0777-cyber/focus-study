@@ -262,7 +262,7 @@ var roleBadge = document.getElementById('role-badge');
 if(MY_ROLE === 'admin'){ roleBadge.textContent = '어드민'; roleBadge.classList.add('admin'); }
 
 // ===== 전역 데이터 캐시 =====
-var DATA = { sessions:{}, enrollments:{}, records:{}, users:{} };
+var DATA = { sessions:{}, enrollments:{}, records:{}, users:{}, fines:{} };
 var CUR_VIEW = '';
 
 function logout(){
@@ -282,7 +282,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('on'); }
 
 // ===== 데이터 로드 =====
 function loadAll(cb){
-  var keys = ['study_sessions','study_enrollments','study_records','study_users'];
+  var keys = ['study_sessions','study_enrollments','study_records','study_users','study_fines'];
   var loaded = 0;
   keys.forEach(function(k){
     db.ref(k).once('value', function(snap){
@@ -1292,9 +1292,21 @@ function renderAdminSettle(app){
     else totalRemain += remain;                // 아직 환급 안 한 환급 예정액
   });
 
+  // 벌금 = 입금된 보증금 − 환급 완료액. 여기서 사용한 벌금을 빼면 벌금 잔액
+  var finePool = totalDeposit - totalRefunded;   // 모인 벌금(환급 후 남은 차액)
+  var fineUsed = 0;
+  Object.keys(DATA.fines).forEach(function(fk){
+    var f = DATA.fines[fk];
+    if(f && typeof f.amount === 'number') fineUsed += f.amount;
+  });
+  var fineRemain = finePool - fineUsed;          // 현재 쓸 수 있는 벌금 잔액
+
   html += '<div class="stat-grid">';
   html += '<div class="stat"><div class="label">입금된 보증금</div><div class="num">'+won(totalDeposit)+'</div></div>';
   html += '<div class="stat"><div class="label">환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">환급 완료 '+won(totalRefunded)+'</div></div>';
+  html += '</div>';
+  html += '<div class="stat-grid" style="margin-top:8px;">';
+  html += '<div class="stat" style="grid-column:1/-1;"><div class="label">벌금 잔액 (회식 등 사용 가능)</div><div class="num" style="color:var(--warn)">'+won(fineRemain)+'</div><div class="sub">모인 벌금 '+won(finePool)+' · 사용 '+won(fineUsed)+'</div></div>';
   html += '</div>';
 
   html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사 / 과목</th><th>환급액</th><th>입금</th><th>환급</th></tr>';
@@ -1322,8 +1334,102 @@ function renderAdminSettle(app){
   });
   html += '</table></div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 입금/환급의 "대기"를 누르면 "완료"로 바뀝니다.<br>※ 송금은 토스에서 직접 하고, 여기서 처리 상태만 기록하세요.<br>※ 종료된 스터디만 정산 금액에 반영됩니다.</div>';
+
+  // ===== 벌금 사용 내역 =====
+  html += '<div class="section-title" style="margin-top:22px;">벌금 사용 내역</div>';
+  html += '<div class="card"><div style="font-size:12px;color:var(--ink2);margin-bottom:10px;">회식 등으로 벌금을 사용하면 기록하세요. 벌금 잔액에서 차감됩니다.</div>';
+  html += '<button class="act-btn" onclick="openFineModal()">+ 벌금 사용 기록 추가</button></div>';
+
+  var fineKeys = Object.keys(DATA.fines).sort(function(a,b){
+    return (DATA.fines[b].date||'').localeCompare(DATA.fines[a].date||'');
+  });
+  if(fineKeys.length){
+    html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>날짜</th><th>용도</th><th>금액</th><th></th></tr>';
+    fineKeys.forEach(function(fk){
+      var f = DATA.fines[fk];
+      html += '<tr><td style="font-size:12px;">'+(f.date||'')+'</td>'+
+        '<td class="name">'+escapeHtml(f.purpose||'')+'</td>'+
+        '<td style="color:var(--danger);font-weight:700;">-'+won(f.amount||0)+'</td>'+
+        '<td><span class="pill x" style="cursor:pointer;" onclick="deleteFine(\''+fk+'\')">삭제</span></td></tr>';
+    });
+    html += '</table></div>';
+  } else {
+    html += '<div class="empty" style="padding:20px;">아직 벌금 사용 내역이 없습니다</div>';
+  }
+
   html += '<button class="act-btn" style="margin-top:14px;" onclick="openPhoneModal()">내 로그인 인증번호 변경</button>';
+
+  // ===== 전체 리셋 (테스트 → 정식) =====
+  html += '<div class="section-title" style="margin-top:22px;color:var(--danger);">정식 시작 준비</div>';
+  html += '<div class="card"><div style="font-size:12px;color:var(--ink2);line-height:1.6;margin-bottom:10px;">테스트가 끝나고 정식으로 시작할 때, 입금·환급 상태와 벌금 내역을 초기화합니다.<br><b style="color:var(--danger);">신청 내역과 출석·숙제 기록도 함께 지워집니다.</b> 되돌릴 수 없으니 신중히 누르세요.</div>';
+  html += '<button class="act-btn" style="background:var(--danger);color:#fff;" onclick="resetAllSettle()">⚠️ 보증금·정산 전체 리셋</button></div>';
+
   app.innerHTML = html;
+}
+
+// ===== 벌금 사용 기록 =====
+function openFineModal(){
+  var today = new Date().toISOString().slice(0,10);
+  var h = '<div class="modal on" id="modal-fine" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:20px;">';
+  h += '<div style="background:#fff;border-radius:14px;padding:22px;max-width:340px;width:100%;">';
+  h += '<h3 style="font-size:17px;font-weight:800;margin-bottom:16px;">벌금 사용 기록</h3>';
+  h += '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">날짜</label>';
+  h += '<input type="date" id="fine-date" value="'+today+'" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px;margin-bottom:12px;font-family:var(--sans);">';
+  h += '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">용도</label>';
+  h += '<input type="text" id="fine-purpose" placeholder="예: 7월 회식" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px;margin-bottom:12px;font-family:var(--sans);">';
+  h += '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:5px;">금액 (원)</label>';
+  h += '<input type="number" id="fine-amount" placeholder="예: 50000" style="width:100%;border:1.5px solid var(--line);border-radius:9px;padding:11px;margin-bottom:16px;font-family:var(--sans);">';
+  h += '<div style="display:flex;gap:8px;">';
+  h += '<button class="act-btn" style="flex:1;" onclick="closeFineModal()">취소</button>';
+  h += '<button class="act-btn" style="flex:1;background:var(--point);color:#fff;" onclick="saveFine()">저장</button>';
+  h += '</div></div></div>';
+  var wrap = document.createElement('div');
+  wrap.id = 'fine-modal-wrap';
+  wrap.innerHTML = h;
+  document.body.appendChild(wrap);
+}
+function closeFineModal(){
+  var w = document.getElementById('fine-modal-wrap');
+  if(w) w.remove();
+}
+function saveFine(){
+  var date = document.getElementById('fine-date').value;
+  var purpose = (document.getElementById('fine-purpose').value||'').trim();
+  var amount = parseInt(document.getElementById('fine-amount').value, 10);
+  if(!purpose){ toast('용도를 입력하세요'); return; }
+  if(!amount || amount <= 0){ toast('금액을 올바르게 입력하세요'); return; }
+  var id = 'f' + Date.now();
+  db.ref('study_fines/'+id).set({ date:date, purpose:purpose, amount:amount, by:MY_NAME }, function(err){
+    if(err){ toast('저장 실패'); return; }
+    DATA.fines[id] = { date:date, purpose:purpose, amount:amount, by:MY_NAME };
+    closeFineModal();
+    toast('벌금 사용을 기록했습니다');
+    renderView(CUR_VIEW);
+  });
+}
+function deleteFine(id){
+  if(!confirm('이 기록을 삭제할까요?')) return;
+  db.ref('study_fines/'+id).remove(function(err){
+    if(err){ toast('삭제 실패'); return; }
+    delete DATA.fines[id];
+    toast('삭제했습니다');
+    renderView(CUR_VIEW);
+  });
+}
+
+// ===== 전체 리셋 (테스트 → 정식) =====
+function resetAllSettle(){
+  if(!confirm('정말 전체 리셋할까요?\n\n신청 내역, 출석·숙제 기록, 벌금 내역이 모두 삭제됩니다.\n되돌릴 수 없습니다.')) return;
+  if(!confirm('마지막 확인입니다.\n정식 시작을 위해 모두 초기화하시겠습니까?')) return;
+  // 신청, 기록, 벌금 삭제 (사용자 계정과 스터디 세션은 유지)
+  db.ref('study_enrollments').remove();
+  db.ref('study_records').remove();
+  db.ref('study_fines').remove(function(err){
+    if(err){ toast('리셋 실패'); return; }
+    DATA.enrollments = {}; DATA.records = {}; DATA.fines = {};
+    toast('초기화 완료. 정식 시작 준비가 되었습니다');
+    renderView(CUR_VIEW);
+  });
 }
 
 // 강사 이름으로 환급 계좌 찾기
