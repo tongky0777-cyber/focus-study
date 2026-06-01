@@ -1316,7 +1316,7 @@ function renderAdminSettle(app){
   html += '<div class="stat"><div class="label">환급 예정</div><div class="num point">'+won(totalRemain)+'</div><div class="sub">환급 완료 '+won(totalRefunded)+'</div></div>';
   html += '</div>';
   html += '<div class="stat-grid" style="margin-top:8px;">';
-  html += '<div class="stat" style="grid-column:1/-1;"><div class="label">벌금 잔액 (회식 등 사용 가능)</div><div class="num" style="color:var(--warn)">'+won(fineRemain)+'</div><div class="sub">모인 벌금 '+won(finePool)+' · 사용 '+won(fineUsed)+'</div></div>';
+  html += '<div class="stat" style="grid-column:1/-1;cursor:pointer;" onclick="showFineSource()"><div class="label">벌금 잔액 (회식 등 사용 가능) ›</div><div class="num" style="color:var(--warn)">'+won(fineRemain)+'</div><div class="sub" style="color:var(--warn)">눌러서 벌금 출처 보기</div></div>';
   html += '</div>';
 
   html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사 / 과목</th><th>환급액</th><th>입금</th><th>환급</th></tr>';
@@ -1422,6 +1422,86 @@ function showPaidList(){
 }
 function closePaidList(){
   var w = document.getElementById('paidlist-modal-wrap');
+  if(w) w.remove();
+}
+
+// ===== 벌금 출처 보기 (어느 강사 보증금에서 왔는지) =====
+function showFineSource(){
+  // 환급 완료된 강사의 차액(입금액 - 환급액)이 벌금으로 들어온 출처
+  var sources = [];
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(!e.paid || !e.refunded) return;
+    var paidAmt = subjectDeposit(e.subject);
+    var refundAmt = calcDeposit(e.name, e.subject);
+    var fine = paidAmt - refundAmt;       // 벌금으로 들어온 차액
+    if(fine > 0){
+      sources.push({ name:e.name, subject:e.subject, paid:paidAmt, refund:refundAmt, fine:fine, at:e.paidAt||'' });
+    }
+  });
+  sources.sort(function(a,b){
+    if(!a.at && !b.at) return 0;
+    if(!a.at) return 1;
+    if(!b.at) return -1;
+    return b.at.localeCompare(a.at);
+  });
+  var totalIn = sources.reduce(function(s,x){ return s+x.fine; }, 0);
+
+  // 사용 내역
+  var uses = [];
+  Object.keys(DATA.fines).forEach(function(fk){
+    var f = DATA.fines[fk];
+    if(f) uses.push(f);
+  });
+  uses.sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+  var totalOut = uses.reduce(function(s,x){ return s+(x.amount||0); }, 0);
+
+  var h = '<div class="modal on" id="modal-finesrc" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);padding:20px;">';
+  h += '<div style="background:#fff;border-radius:14px;padding:22px;max-width:380px;width:100%;max-height:82vh;overflow-y:auto;">';
+  h += '<h3 style="font-size:17px;font-weight:800;margin-bottom:4px;">벌금 출처 / 사용 내역</h3>';
+  h += '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;">모인 벌금 '+won(totalIn)+' · 사용 '+won(totalOut)+'</div>';
+
+  // 들어온 벌금
+  h += '<div style="font-size:13px;font-weight:800;color:var(--warn);margin-bottom:8px;">＋ 들어온 벌금 (환급 차액)</div>';
+  if(!sources.length){
+    h += '<div class="empty" style="padding:14px;">아직 환급 완료된 보증금이 없습니다</div>';
+  } else {
+    h += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">';
+    sources.forEach(function(it){
+      h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<span style="font-weight:700;font-size:14px;">'+escapeHtml(it.name)+'</span>'+
+        '<span style="font-weight:800;color:var(--warn);">+'+won(it.fine)+'</span></div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:3px;">'+escapeHtml(it.subject)+' · 입금 '+won(it.paid)+' / 환급 '+won(it.refund)+'</div></div>';
+    });
+    h += '</div>';
+  }
+
+  // 나간 벌금 (사용)
+  h += '<div style="font-size:13px;font-weight:800;color:var(--danger);margin-bottom:8px;">－ 사용한 벌금</div>';
+  if(!uses.length){
+    h += '<div class="empty" style="padding:14px;">아직 사용 내역이 없습니다</div>';
+  } else {
+    h += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    uses.forEach(function(u){
+      h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;">'+
+        '<span style="font-weight:700;font-size:14px;">'+escapeHtml(u.purpose||'')+'</span>'+
+        '<span style="font-weight:800;color:var(--danger);">-'+won(u.amount||0)+'</span></div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:3px;">'+(u.date||'')+'</div></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<button class="act-btn" style="margin-top:16px;" onclick="closeFineSource()">닫기</button>';
+  h += '</div></div>';
+  var wrap = document.createElement('div');
+  wrap.id = 'finesrc-modal-wrap';
+  wrap.innerHTML = h;
+  document.body.appendChild(wrap);
+}
+function closeFineSource(){
+  var w = document.getElementById('finesrc-modal-wrap');
   if(w) w.remove();
 }
 // 날짜+시각 표시 (예: 5/31 14:20)
