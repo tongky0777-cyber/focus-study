@@ -248,6 +248,19 @@ var firebaseConfig = {
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
 
+// ===== 텔레그램 알림 (관리자에게) =====
+var TG_TOKEN = "8782124271:AAEZ7cv59orNmh3eDVVXrPG82o4fDgX7Lu8";
+var TG_CHAT_ID = "1916607767";
+function notifyTelegram(text){
+  try{
+    fetch("https://api.telegram.org/bot"+TG_TOKEN+"/sendMessage", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ chat_id:TG_CHAT_ID, text:text })
+    }).catch(function(){});
+  }catch(e){}
+}
+
 var DEPOSIT = 50000;     // 과목당 보증금
 var DEDUCT = 10000;      // 결석+숙제미인증 차감액
 
@@ -290,6 +303,24 @@ function loadAll(cb){
       DATA[short] = snap.val() || {};
       loaded++;
       if(loaded === keys.length && cb) cb();
+    });
+  });
+}
+
+// ===== 실시간 구독: 데이터가 바뀌면 현재 화면 자동 갱신 =====
+var _liveStarted = false;
+function startLive(){
+  if(_liveStarted) return;
+  _liveStarted = true;
+  var keys = ['study_sessions','study_enrollments','study_records','study_users','study_fines'];
+  keys.forEach(function(k){
+    var short = k.replace('study_','');
+    db.ref(k).on('value', function(snap){
+      DATA[short] = snap.val() || {};
+      // 모달이 열려 있으면 화면을 다시 안 그림(입력 중 방해 방지)
+      var anyModalOpen = document.querySelector('.modal.on');
+      if(anyModalOpen) return;
+      if(CUR_VIEW) renderView(CUR_VIEW);
     });
   });
 }
@@ -887,6 +918,9 @@ function saveEnroll(){
       DATA.users[UID].account = account;
       closeModal('modal-enroll');
       toast('스터디 신청 완료! 💰');
+      if(MY_ROLE !== 'admin'){
+        notifyTelegram('💰 스터디 신청\n'+MY_NAME+' 강사 · '+subject+'\n보증금 '+subjectDeposit(subject).toLocaleString()+'원');
+      }
       showView('t-home');
     });
   });
@@ -1630,7 +1664,7 @@ function toggleRefunded(encName, encSubject){
 }
 
 // ===== 시작 =====
-loadAll(function(){ buildTabs(); });
+loadAll(function(){ buildTabs(); startLive(); });
 </script>
 </body>
 </html>
