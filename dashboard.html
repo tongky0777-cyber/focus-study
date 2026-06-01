@@ -1283,6 +1283,22 @@ function renderAdminStatus(app){
     html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · 신청 '+enrolledNames.length+'명</div>';
 
     html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
+
+    // 신청 강사 관리 (어드민이 신청 취소) — 보증금 얽힘 주의
+    html += '<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
+    html += '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:8px;">신청 강사 · 신청 취소</div>';
+    if(!enrolledNames.length){
+      html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
+    } else {
+      enrolledNames.forEach(function(nm){
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">'+
+          '<span style="font-size:13px;">'+nm+'</span>'+
+          '<button class="act-btn" style="padding:4px 12px;font-size:12px;background:var(--danger);color:#fff;width:auto;" onclick="cancelEnroll(\''+encodeURIComponent(nm)+'\',\''+encodeURIComponent(first.subject)+'\')">신청 취소</button>'+
+          '</div>';
+      });
+    }
+    html += '</div>';
+
     g.sessions.forEach(function(ses){
       var recs = DATA.records[ses.id] || {};
       var attendCount = Object.keys(recs).filter(function(n){ return recs[n].attended; }).length;
@@ -1683,6 +1699,25 @@ function toggleRefunded(encName, encSubject){
     if(err){ toast('변경 실패'); return; }
     DATA.enrollments[key].refunded = next;
     toast(next ? '환급 완료 처리됨' : '환급 완료 취소됨');
+    renderView(CUR_VIEW);
+  });
+}
+
+// ===== 어드민: 강사 신청 취소 (스터디에서 빼기) =====
+function cancelEnroll(encName, encSubject){
+  var name = decodeURIComponent(encName), subject = decodeURIComponent(encSubject);
+  var key = enrollKey(name, subject);
+  if(!key){ toast('신청 정보를 찾을 수 없습니다'); return; }
+  var e = DATA.enrollments[key] || {};
+  var warn = name + ' 강사의 [' + subject + '] 신청을 취소할까요?';
+  if(e.paid && !e.refunded){
+    warn += '\n\n⚠️ 이미 보증금이 입금된 강사입니다.\n취소하면 정산 목록에서 사라지니, 보증금 환급은 직접 처리해 주세요.';
+  }
+  if(!confirm(warn)) return;
+  db.ref('study_enrollments/'+key).remove(function(err){
+    if(err){ toast('취소 실패'); return; }
+    delete DATA.enrollments[key];
+    toast(name + ' 강사 신청을 취소했습니다');
     renderView(CUR_VIEW);
   });
 }
