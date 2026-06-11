@@ -1801,16 +1801,26 @@ function renderAdminStatus(app){
     html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
 
     // 신청 강사 관리 (어드민이 신청 취소) — 보증금 얽힘 주의
+    var paidList = enrolls.filter(function(it){ return it.e.paid; });
+    var waitList = enrolls.filter(function(it){ return !it.e.paid; });
     html += '<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
-    html += '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:8px;">신청 강사 · 신청 취소</div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">'+
+      '<span style="font-size:12px;font-weight:700;color:var(--ink2);">신청 강사 · '+enrolls.length+'명'+(enrolls.length?' <span style="font-weight:400;color:var(--muted);">(입금 '+paidList.length+' · 대기 '+waitList.length+')</span>':'')+'</span>';
+    if(waitList.length){
+      html += '<button onclick="tidyUnpaid(\''+encodeURIComponent(first.subject)+'\')" style="flex-shrink:0;font-size:11px;font-weight:800;color:var(--danger);background:var(--white);border:1px solid #fca5a5;border-radius:8px;padding:6px 11px;cursor:pointer;font-family:inherit;">미입금 '+waitList.length+'명 정리</button>';
+    }
+    html += '</div>';
     if(!enrolls.length){
       html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
     } else {
       enrolls.forEach(function(it){
         var lbl = adminNameLabel(it.e.uid, it.e.name);
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">'+
-          '<span style="font-size:13px;">'+lbl+'</span>'+
-          '<button class="act-btn" style="padding:4px 12px;font-size:12px;background:var(--danger);color:#fff;width:auto;" onclick="cancelEnroll(\''+encodeURIComponent(it.ekey)+'\')">신청 취소</button>'+
+        var statusDot = it.e.paid
+          ? '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:var(--ok-bg);color:var(--point);">입금</span>'
+          : '<span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;background:var(--danger-bg);color:var(--danger);">대기</span>';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line);">'+
+          '<span style="font-size:13px;display:flex;align-items:center;gap:7px;min-width:0;">'+lbl+' '+statusDot+'</span>'+
+          '<button onclick="cancelEnroll(\''+encodeURIComponent(it.ekey)+'\')" style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--danger);background:var(--white);border:1px solid #fca5a5;border-radius:7px;padding:4px 10px;cursor:pointer;font-family:inherit;">취소</button>'+
           '</div>';
       });
     }
@@ -2337,6 +2347,35 @@ function cancelEnroll(encKey){
     delete DATA.enrollments[key];
     toast(name + ' 강사 신청을 취소했습니다');
     renderView(CUR_VIEW);
+  });
+}
+
+// ===== 어드민: 미입금(대기) 강사 일괄 정리 =====
+function tidyUnpaid(encSubject){
+  var subject = decodeURIComponent(encSubject);
+  // 해당 과목의 입금 대기(미입금) 신청만 수집
+  var targets = [];
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(e.subject === subject && !e.paid) targets.push({key:k, name:e.name});
+  });
+  if(!targets.length){ toast('정리할 미입금 신청이 없습니다'); return; }
+
+  var names = targets.map(function(t){ return t.name; });
+  var preview = names.slice(0,3).join(', ') + (names.length>3 ? ' 외 '+(names.length-3)+'명' : '');
+  if(!confirm('['+subject+'] 입금하지 않은 '+targets.length+'명을 신청 취소할까요?\n\n'+preview+'\n\n※ 입금 확인된 강사는 그대로 유지됩니다.')) return;
+
+  var done = 0, fail = 0;
+  targets.forEach(function(t){
+    db.ref('study_enrollments/'+t.key).remove(function(err){
+      if(err) fail++;
+      else delete DATA.enrollments[t.key];
+      done++;
+      if(done === targets.length){
+        toast(fail ? (targets.length-fail)+'명 정리 (일부 실패)' : targets.length+'명 정리 완료');
+        renderView(CUR_VIEW);
+      }
+    });
   });
 }
 
