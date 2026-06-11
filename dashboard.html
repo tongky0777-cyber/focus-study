@@ -87,6 +87,15 @@
   .caplbl{display:flex;justify-content:space-between;font-size:11px;margin-top:5px;}
   .caplbl .n{color:var(--ink2);font-weight:700;}
 
+  /* 사용 여부 토글 스위치 */
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--white);margin-bottom:8px;}
+  .toggle-row .tt{font-size:14px;font-weight:700;color:var(--ink);}
+  .toggle-row .ts{font-size:11px;color:var(--muted);margin-top:2px;}
+  .sw{width:44px;height:26px;border-radius:20px;position:relative;flex-shrink:0;transition:.2s;cursor:pointer;background:#cbd5e1;border:none;padding:0;}
+  .sw.on{background:var(--point);}
+  .sw b{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;}
+  .sw.on b{left:21px;}
+
   /* 하단 탭 */
   .tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--line);display:flex;z-index:50;max-width:760px;margin:0 auto;}
   .tabbar .tab{flex:1;text-align:center;padding:10px 4px 8px;cursor:pointer;color:var(--muted);}
@@ -163,6 +172,18 @@
       <label>허용 인원 (정원)</label>
       <input id="ses-capacity" type="number" min="0" step="1" placeholder="예) 6">
       <div style="font-size:11px;color:var(--muted);margin-top:5px;">정원이 다 차면 신청이 자동 마감됩니다. 비워두거나 0이면 인원 제한 없음.</div>
+    </div>
+    <div class="field" id="ses-usefields">
+      <label>인증 항목 사용</label>
+      <div class="toggle-row">
+        <div><div class="tt">출석 체크 사용</div><div class="ts">끄면 출석 인증 화면이 안 보입니다</div></div>
+        <button type="button" class="sw on" id="sw-attend" onclick="toggleUseSwitch('attend')"><b></b></button>
+      </div>
+      <div class="toggle-row" style="margin-bottom:0;">
+        <div><div class="tt">숙제 인증 사용</div><div class="ts">끄면 숙제 인증 화면이 안 보입니다</div></div>
+        <button type="button" class="sw on" id="sw-hw" onclick="toggleUseSwitch('hw')"><b></b></button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">보증금 차감은 켜둔 항목만으로 판정됩니다. 둘 다 끄면 그 회차는 차감이 없어요.</div>
     </div>
     <div class="field">
       <label>스터디 정보 (선택)</label>
@@ -440,28 +461,53 @@ function subjectRoundPrice(subject){
 function subjectDeposit(subject){
   return subjectSessionCount(subject) * subjectRoundPrice(subject);
 }
+// 특정 과목의 출석 사용 여부 (기본: 사용)
+function subjectUseAttend(subject){
+  var v = null;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    if(v === null && ses.useAttend !== undefined) v = !!ses.useAttend;
+  });
+  return (v === null) ? true : v;
+}
+// 특정 과목의 숙제 사용 여부 (기본: 사용)
+function subjectUseHw(subject){
+  var v = null;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    if(v === null && ses.useHw !== undefined) v = !!ses.useHw;
+  });
+  return (v === null) ? true : v;
+}
+// 세션 단위 사용 여부 (기본 사용)
+function sesUseAttend(ses){ return (ses && ses.useAttend !== undefined) ? !!ses.useAttend : true; }
+function sesUseHw(ses){ return (ses && ses.useHw !== undefined) ? !!ses.useHw : true; }
+
 // 특정 강사의 특정 과목 보증금 잔액 계산
 // who: uid 또는 이름(레거시) 모두 허용
 function calcDeposit(who, subject){
   var deductions = 0;
-  // 해당 과목의 모든 회차(세션)를 찾아서, 출석X AND 숙제X면 차감
+  // 해당 과목의 모든 회차(세션)를 찾아서, 켜둔 항목을 하나도 안 했으면 차감
   Object.keys(DATA.sessions).forEach(function(sid){
     var ses = DATA.sessions[sid];
     if(ses.subject !== subject) return;
     // 마감 시간이 지난 세션만 정산 대상
     if(!isSessionClosed(ses)) return;
+    var uA = sesUseAttend(ses), uH = sesUseHw(ses);
+    // 둘 다 끈 회차는 차감 대상 아님
+    if(!uA && !uH) return;
     var recsForSes = DATA.records[sid] || {};
-    // uid 키로 먼저, 없으면 이름 키로 호환 조회
     var rec = recsForSes[who];
     if(rec === undefined){
-      // who가 uid인데 기록은 이름키로 저장된 옛 데이터일 수 있음
       var u = DATA.users[who];
       if(u && recsForSes[u.name] !== undefined) rec = recsForSes[u.name];
     }
     rec = rec || {};
-    var attended = !!rec.attended;
-    var hw = !!rec.homework;
-    if(!attended && !hw) deductions += subjectRoundPrice(subject);
+    // 켜둔 항목 중 하나라도 했으면 유지, 켜둔 항목을 전부 안 했으면 차감
+    var didSomething = (uA && rec.attended) || (uH && rec.homework);
+    if(!didSomething) deductions += subjectRoundPrice(subject);
   });
   return Math.max(0, subjectDeposit(subject) - deductions);
 }
@@ -628,13 +674,22 @@ function renderTeacherHome(app){
     html += '<div class="empty">예정된 스터디가 없습니다</div>';
   } else {
     upcoming.forEach(function(ses){
+      var uA = sesUseAttend(ses), uH = sesUseHw(ses);
       var aState = attendState(ses);
-      var badge = aState==='open' ? '<span class="badge-time open">출석 가능</span>'
-                : aState==='before' ? '<span class="badge-time before">'+fmtDate(ses.date)+'</span>'
-                : '<span class="badge-time closed">출석 마감</span>';
+      var badge;
+      if(uA){
+        badge = aState==='open' ? '<span class="badge-time open">출석 가능</span>'
+              : aState==='before' ? '<span class="badge-time before">'+fmtDate(ses.date)+'</span>'
+              : '<span class="badge-time closed">출석 마감</span>';
+      } else {
+        badge = '<span class="badge-time before">'+fmtDate(ses.date)+'</span>';
+      }
+      // 인증 항목 안내
+      var useTxt = (uA && uH) ? '출석 · 숙제 인증' : uA ? '출석 인증만' : uH ? '숙제 인증만' : '인증 없음';
       html += '<div class="sess"><div class="card-row"><span class="subj">'+ses.subject+'</span>'+badge+'</div>'+
         '<div class="title">'+(ses.title||ses.subject)+'</div>'+
         '<div class="meta">다음 '+(roundLabel(ses)||'회차')+' · '+fmtDate(ses.date)+'</div>'+
+        '<div class="meta" style="color:var(--point);font-weight:700;">'+useTxt+'</div>'+
         (ses.desc ? '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(ses.desc)+'</div>' : '')+
         '</div>';
     });
@@ -679,6 +734,9 @@ function renderTeacherHome(app){
       html += '<span class="subj">'+escapeHtml(sub)+'</span>';
       html += '<div class="title" style="margin-top:8px;">'+escapeHtml(title)+'</div>';
       html += '<div class="meta">'+rounds+'회차 · 회차당 '+wonShort(price)+'</div>';
+      var uA2 = subjectUseAttend(sub), uH2 = subjectUseHw(sub);
+      var useTxt2 = (uA2 && uH2) ? '출석 · 숙제 인증' : uA2 ? '출석 인증만' : uH2 ? '숙제 인증만' : '인증 없음';
+      html += '<div class="meta" style="color:var(--point);font-weight:700;">'+useTxt2+'</div>';
 
       if(cap !== null){
         var left = Math.max(0, cap - cnt);
@@ -732,6 +790,7 @@ function renderTeacherAttend(app){
   Object.keys(DATA.sessions).forEach(function(sid){
     var ses = DATA.sessions[sid];
     if(mySubjects.indexOf(ses.subject) < 0) return;
+    if(!sesUseAttend(ses)) return; // 출석 미사용 스터디 제외
     if(ses.date === today) todaySessions.push(Object.assign({id:sid}, ses));
   });
   todaySessions.sort(function(a,b){ return a.date.localeCompare(b.date); });
@@ -793,6 +852,7 @@ function renderTeacherHw(app){
   Object.keys(DATA.sessions).forEach(function(sid){
     var ses = DATA.sessions[sid];
     if(mySubjects.indexOf(ses.subject) < 0) return;
+    if(!sesUseHw(ses)) return; // 숙제 미사용 스터디 제외
     sessions.push(Object.assign({id:sid}, ses));
   });
   // 진행중(인증가능/예정) 먼저, 마감/종료된 건 아래로.
@@ -1022,8 +1082,10 @@ function renderTeacherDeposit(app){
       if(ses.subject !== e.subject) return;
       if(!isSessionClosed(ses)) return;
       var rec = (DATA.records[sid] && DATA.records[sid][myRecKey(sid)]) || {};
-      var ok = rec.attended || rec.homework;
-      detail.push({title:ses.title||ses.subject, date:ses.date, ok:ok, att:!!rec.attended, hw:!!rec.homework});
+      var uA = sesUseAttend(ses), uH = sesUseHw(ses);
+      var noCheck = (!uA && !uH);
+      var ok = noCheck ? true : ((uA && rec.attended) || (uH && rec.homework));
+      detail.push({title:ses.title||ses.subject, date:ses.date, ok:ok, noCheck:noCheck, att:!!rec.attended, hw:!!rec.homework, uA:uA, uH:uH});
     });
     detail.sort(function(a,b){ return b.date.localeCompare(a.date); });
 
@@ -1038,8 +1100,9 @@ function renderTeacherDeposit(app){
     if(detail.length){
       html += '<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">';
       detail.forEach(function(d){
-        var mark = d.ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-'+wonShort(subjectRoundPrice(e.subject))+'</span>';
-        var sub = (d.att?'출석 ':'')+(d.hw?'숙제':'')||'미인증';
+        var mark = d.noCheck ? '<span style="color:var(--muted);font-size:11px;">인증 없음</span>'
+                 : d.ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-'+wonShort(subjectRoundPrice(e.subject))+'</span>';
+        var sub = d.noCheck ? '일정' : ((d.att?'출석 ':'')+(d.hw?'숙제':'')||'미인증');
         html += '<div class="card-row" style="padding:5px 0;font-size:12px;"><span>'+fmtDate(d.date)+' · <span style="color:var(--muted)">'+sub+'</span></span>'+mark+'</div>';
       });
       html += '</div>';
@@ -1389,12 +1452,28 @@ function openSessionModal(){
   document.getElementById('ses-price').value = '10000';
   document.getElementById('ses-capacity').value = '';
   document.getElementById('ses-desc').value = '';
+  setUseSwitch('attend', true);
+  setUseSwitch('hw', true);
   document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'block';
   document.getElementById('ses-price-field').style.display = 'block';
   document.getElementById('ses-capacity-field').style.display = 'block';
+  document.getElementById('ses-usefields').style.display = 'block';
   updateDepositSummary();
   openModal('modal-session');
+}
+
+// 인증 항목 사용 토글 상태
+var _useAttend = true, _useHw = true;
+function setUseSwitch(which, on){
+  if(which === 'attend'){ _useAttend = on; }
+  else { _useHw = on; }
+  var el = document.getElementById(which === 'attend' ? 'sw-attend' : 'sw-hw');
+  if(el) el.classList.toggle('on', on);
+}
+function toggleUseSwitch(which){
+  if(which === 'attend'){ setUseSwitch('attend', !_useAttend); }
+  else { setUseSwitch('hw', !_useHw); }
 }
 
 // 개설 모달 보증금 안내 갱신
@@ -1418,11 +1497,12 @@ function openEditSession(sid){
   document.getElementById('ses-title').value = ses.title || '';
   document.getElementById('ses-date').value = ses.date || '';
   document.getElementById('ses-desc').value = ses.desc || '';
-  // 회차 수정 시: 날짜는 보이고, 회차 수·보증금·정원 칸은 숨김(그룹 단위 값이므로)
+  // 회차 수정 시: 날짜는 보이고, 회차 수·보증금·정원·토글 칸은 숨김(그룹 단위 값이므로)
   document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'none';
   document.getElementById('ses-price-field').style.display = 'none';
   document.getElementById('ses-capacity-field').style.display = 'none';
+  document.getElementById('ses-usefields').style.display = 'none';
   openModal('modal-session');
 }
 
@@ -1468,6 +1548,7 @@ function saveSession(){
       var ses = {
         subject:subject, title:title, date:dateStr, desc:desc,
         groupId:groupId, round:(i+1), totalRounds:count, roundPrice:roundPrice, capacity:capacity,
+        useAttend:_useAttend, useHw:_useHw,
         createdAt:new Date().toISOString()
       };
       (function(key, sesObj){
@@ -1523,6 +1604,9 @@ function openEditGroup(gid){
   document.getElementById('ses-price').value = (typeof first.roundPrice === 'number') ? first.roundPrice : DEDUCT;
   document.getElementById('ses-capacity-field').style.display = 'block';
   document.getElementById('ses-capacity').value = (typeof first.capacity === 'number' && first.capacity > 0) ? first.capacity : '';
+  document.getElementById('ses-usefields').style.display = 'block';
+  setUseSwitch('attend', sesUseAttend(first));
+  setUseSwitch('hw', sesUseHw(first));
   _editSessionId = null;
   openModal('modal-session');
 }
@@ -1546,15 +1630,16 @@ function saveEditGroup(){
   if(!keys.length){ toast('스터디를 찾을 수 없습니다'); return; }
   var done = 0, fail = false;
   keys.forEach(function(sid){
-    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity }, function(err){
+    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw }, function(err){
       if(err) fail = true;
-      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity });
+      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw });
       done++;
       if(done === keys.length){
         // 날짜·보증금·정원 칸 다시 기본 상태로 복구
         document.getElementById('ses-date').parentElement.style.display = 'block';
         document.getElementById('ses-price-field').style.display = 'block';
         document.getElementById('ses-capacity-field').style.display = 'block';
+        document.getElementById('ses-usefields').style.display = 'block';
         closeModal('modal-session');
         _editGroupId = null;
         toast(fail ? '일부 저장 실패' : '스터디 정보를 수정했습니다');
@@ -1645,20 +1730,26 @@ function renderAdminStatus(app){
       if(!enrolls.length){
         html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
       } else {
+        var uA = sesUseAttend(ses), uH = sesUseHw(ses);
         html += '<div class="tbl-wrap"><table class="tbl"><tr><th>강사</th><th>출석</th><th>숙제</th><th>상태</th></tr>';
         enrolls.forEach(function(it){
           // 이 강사 기록: uid 키 우선, 없으면 이름 키(레거시)
           var rkey = (recs[it.e.uid]!==undefined) ? it.e.uid : it.e.name;
           var r = recs[rkey] || {};
-          var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
+          var att = !uA ? '<span style="color:var(--muted)">—</span>'
+                  : r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
           var photoCount = (r.homeworkPhotos ? r.homeworkPhotos.length : (r.homeworkPhoto ? 1 : 0));
-          var hw = r.homework
+          var hw = !uH ? '<span style="color:var(--muted)">—</span>'
+            : r.homework
             ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(rkey)+'\')">📷 '+photoCount+'장</span>'
             : '<span class="pill x">X</span>';
-          var ok = (r.attended || r.homework);
           var closed = isSessionClosed(ses);
+          // 켠 항목 중 하나라도 했으면 유지, 둘 다 끄면 차감 없음
+          var didSomething = (uA && r.attended) || (uH && r.homework);
+          var noCheck = (!uA && !uH);
           var status = !closed ? '<span style="color:var(--muted);font-size:11px">진행중</span>'
-                     : ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-'+wonShort(subjectRoundPrice(first.subject))+'</span>';
+                     : noCheck ? '<span style="color:var(--muted);font-size:11px">인증 없음</span>'
+                     : didSomething ? '<span class="pill o">유지</span>' : '<span class="pill x">-'+wonShort(subjectRoundPrice(first.subject))+'</span>';
           html += '<tr><td class="name">'+adminNameLabel(it.e.uid, it.e.name)+'</td><td>'+att+'</td><td>'+hw+'</td><td>'+status+'</td></tr>';
         });
         html += '</table></div>';
