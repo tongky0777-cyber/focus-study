@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#1a2d23">
+<meta name="theme-color" content="#0c4a6e">
 <link rel="manifest" href="manifest.json">
 <title>포커스 수학연구팀 스터디</title>
 <style>
   :root{
-    --main:#1a2d23; --point:#16825a; --point2:#0f6e56;
-    --bg:#f4f6f5; --white:#fff; --ink:#1a2d23; --ink2:#555;
-    --muted:#999; --line:#e5e8e6; --danger:#c0392b;
+    --main:#0c4a6e; --point:#0891b2; --point2:#0e7490;
+    --bg:#f5fafe; --white:#fff; --ink:#0c4a6e; --ink2:#475569;
+    --muted:#94a3b8; --line:#dbeefb; --danger:#dc2626;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;}
@@ -159,11 +159,21 @@ function doSignup(){
   btn.disabled = true;
   showMsg('signup-msg','확인 중...','');
 
-  var key = nameKey(name);
-  db.ref(USERS_REF + '/' + key).once('value', function(snap){
-    if(snap.exists()){
+  // 계정 키 = 이름 + 전화번호 뒷4자리 (동명이인도 각자 가입 가능)
+  var key = nameKey(name) + '_' + phone;
+  db.ref(USERS_REF).once('value', function(snap){
+    var all = snap.val() || {};
+    // 같은 이름+전화번호 조합이 이미 있으면 중복
+    var dupKey = false, dupLegacy = false;
+    Object.keys(all).forEach(function(k){
+      var u = all[k] || {};
+      if(k === key) dupKey = true;
+      // 옛 방식(이름만 키)으로 가입한 동일 인물 호환 체크
+      if(k === nameKey(name) && u.phone === phone) dupLegacy = true;
+    });
+    if(dupKey || dupLegacy){
       btn.disabled = false;
-      showMsg('signup-msg','이미 가입된 이름입니다. 로그인해주세요','error');
+      showMsg('signup-msg','이미 가입된 정보입니다. 로그인해주세요','error');
       return;
     }
     var isAdmin = (name === ADMIN_NAME && phone === ADMIN_PHONE);
@@ -198,23 +208,46 @@ function doLogin(){
   btn.disabled = true;
   showMsg('login-msg','로그인 중...','');
 
-  var key = nameKey(name);
-  db.ref(USERS_REF + '/' + key).once('value', function(snap){
+  db.ref(USERS_REF).once('value', function(snap){
     btn.disabled = false;
-    if(!snap.exists()){
-      showMsg('login-msg','가입된 정보가 없습니다. 회원가입해주세요','error');
+    var all = snap.val() || {};
+    var newKey = nameKey(name) + '_' + phone;
+    var legacyKey = nameKey(name);
+    var foundKey = null, foundUser = null;
+
+    // 1순위: 새 방식 키(이름_전화번호)에서 이름+전화 일치
+    if(all[newKey] && all[newKey].phone === phone && all[newKey].name === name){
+      foundKey = newKey; foundUser = all[newKey];
+    }
+    // 2순위: 옛 방식 키(이름만)에서 이름+전화 일치 (기존 가입자 호환)
+    else if(all[legacyKey] && all[legacyKey].phone === phone){
+      foundKey = legacyKey; foundUser = all[legacyKey];
+    }
+    // 3순위: 혹시 다른 키에 동일 이름+전화가 있으면 탐색
+    else {
+      Object.keys(all).forEach(function(k){
+        if(foundKey) return;
+        var u = all[k] || {};
+        if(u.name === name && u.phone === phone){ foundKey = k; foundUser = u; }
+      });
+    }
+
+    if(!foundUser){
+      // 이름은 있는데 전화가 다른 경우 vs 아예 없는 경우 구분
+      var nameExists = Object.keys(all).some(function(k){ return (all[k]||{}).name === name; });
+      if(nameExists){
+        showMsg('login-msg','전화번호가 일치하지 않습니다','error');
+      } else {
+        showMsg('login-msg','가입된 정보가 없습니다. 회원가입해주세요','error');
+      }
       return;
     }
-    var user = snap.val();
-    if(user.phone !== phone){
-      showMsg('login-msg','전화번호가 일치하지 않습니다','error');
-      return;
-    }
+
     showMsg('login-msg','로그인 성공!','ok');
-    localStorage.setItem('study_uid', key);
-    localStorage.setItem('study_name', user.name);
-    localStorage.setItem('study_role', user.role || 'teacher');
-    localStorage.setItem('study_last_name', user.name);
+    localStorage.setItem('study_uid', foundKey);
+    localStorage.setItem('study_name', foundUser.name);
+    localStorage.setItem('study_role', foundUser.role || 'teacher');
+    localStorage.setItem('study_last_name', foundUser.name);
     localStorage.setItem('study_last_phone', phone);
     setTimeout(function(){ location.href = 'dashboard.html'; }, 600);
   });

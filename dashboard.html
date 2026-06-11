@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#1a2d23">
+<meta name="theme-color" content="#0c4a6e">
 <link rel="manifest" href="manifest.json">
 <title>포커스 스터디 · 대시보드</title>
 <style>
   :root{
-    --main:#1a2d23; --point:#16825a; --point2:#0f6e56;
-    --bg:#f4f6f5; --white:#fff; --ink:#1a2d23; --ink2:#555;
-    --muted:#999; --line:#e5e8e6; --danger:#c0392b; --danger-bg:#fdecea;
-    --ok:#16825a; --ok-bg:#e6f4ee; --warn:#c08c22; --warn-bg:#fbf3e0;
+    --main:#0c4a6e; --point:#0891b2; --point2:#0e7490;
+    --bg:#f5fafe; --white:#fff; --ink:#0c4a6e; --ink2:#475569;
+    --muted:#94a3b8; --line:#dbeefb; --danger:#dc2626; --danger-bg:#fee2e2;
+    --ok:#0891b2; --ok-bg:#e0f2fe; --warn:#b45309; --warn-bg:#fef3c7;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:70px;}
@@ -20,7 +20,7 @@
   .topbar .brand small{display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.55);margin-top:1px;}
   .topbar .user{display:flex;align-items:center;gap:8px;font-size:12px;}
   .topbar .role-badge{background:var(--point);font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;}
-  .topbar .role-badge.admin{background:#c08c22;}
+  .topbar .role-badge.admin{background:#b45309;}
   .logout{background:rgba(255,255,255,.12);color:#fff;border:none;font-size:11px;padding:5px 10px;border-radius:6px;cursor:pointer;}
   .wrap{max-width:760px;margin:0 auto;padding:16px;}
   .view{display:none;}
@@ -78,6 +78,14 @@
   .pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
   .pill.o{background:var(--ok-bg);color:var(--point);}
   .pill.x{background:var(--danger-bg);color:var(--danger);}
+
+  /* 남은 자리 진행 막대 */
+  .capbar{height:7px;background:var(--ok-bg);border-radius:10px;overflow:hidden;margin-top:10px;}
+  .capbar i{display:block;height:100%;background:var(--point);border-radius:10px;}
+  .capbar.capbar-low i{background:var(--warn);}
+  .capbar.capbar-full i{background:var(--danger);}
+  .caplbl{display:flex;justify-content:space-between;font-size:11px;margin-top:5px;}
+  .caplbl .n{color:var(--ink2);font-weight:700;}
 
   /* 하단 탭 */
   .tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--line);display:flex;z-index:50;max-width:760px;margin:0 auto;}
@@ -146,6 +154,16 @@
       <input id="ses-count" type="number" min="1" max="20" value="5">
       <div style="font-size:11px;color:var(--muted);margin-top:5px;">첫 회차 날짜부터 매주 같은 요일로 자동 생성됩니다 (예: 5회차 = 5주 연속)</div>
     </div>
+    <div class="field" id="ses-price-field">
+      <label>회차당 보증금 (원)</label>
+      <input id="ses-price" type="number" min="0" step="1000" value="10000">
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;">이 스터디의 회차당 보증금입니다. 스터디마다 다르게 정할 수 있어요.</div>
+    </div>
+    <div class="field" id="ses-capacity-field">
+      <label>허용 인원 (정원)</label>
+      <input id="ses-capacity" type="number" min="0" step="1" placeholder="예) 6">
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;">정원이 다 차면 신청이 자동 마감됩니다. 비워두거나 0이면 인원 제한 없음.</div>
+    </div>
     <div class="field">
       <label>스터디 정보 (선택)</label>
       <textarea id="ses-desc" rows="4" placeholder="예) 범위, 준비물, 진행 방식, 숙제 분량 등 강사들에게 안내할 내용" style="width:100%;padding:12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);resize:vertical;"></textarea>
@@ -155,7 +173,7 @@
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.7;">
         · 출석: 당일 오전 <b>9:50 ~ 10:30</b><br>
         · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b><br>
-        · 보증금: <b>회차당 1만원</b> (5회차 = 5만원)
+        · 보증금: <b id="ses-deposit-summary">회차당 1만원 (5회차 = 총 5만원)</b>
       </div>
     </div>
     <button class="btn" id="ses-save-btn" onclick="saveSession()">개설하기</button>
@@ -178,16 +196,19 @@
     </div>
     <div class="card" style="background:var(--warn-bg);border-color:var(--warn);">
       <div style="font-size:13px;color:var(--warn);font-weight:700;">보증금 입금 계좌</div>
-      <div style="font-size:14px;font-weight:800;color:var(--main);margin-top:5px;">토스뱅크 1000-6131-1749</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:5px;">
+        <div style="font-size:14px;font-weight:800;color:var(--main);">토스뱅크 1000-6131-1749</div>
+        <button type="button" id="copy-acct-btn" onclick="copyDepositAccount()" style="flex-shrink:0;font-size:12px;font-weight:800;color:var(--point);background:var(--ok-bg);border:1px solid var(--point);border-radius:8px;padding:7px 12px;cursor:pointer;font-family:inherit;">📋 복사</button>
+      </div>
       <div style="font-size:12px;color:var(--ink2);">예금주: 김병진</div>
       <div id="enr-deposit-info" style="font-size:13px;color:var(--warn);font-weight:700;margin-top:6px;"></div>
     </div>
     <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
       <div style="font-size:13px;color:var(--point);font-weight:700;">보증금 안내</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.6;">
-        · 보증금은 회차당 1만원입니다<br>
+        · 보증금은 <span id="enr-roundprice-note">회차당 1만원</span>입니다<br>
         · 매 회차 출석 또는 숙제 인증 시 차감 없음<br>
-        · 결석 + 숙제 미인증 시 회차당 1만원 차감
+        · 결석 + 숙제 미인증 시 <span id="enr-deduct-note">회차당 1만원</span> 차감
       </div>
     </div>
     <button class="btn" onclick="saveEnroll()">신청하기</button>
@@ -278,6 +299,23 @@ if(MY_ROLE === 'admin'){ roleBadge.textContent = '어드민'; roleBadge.classLis
 var DATA = { sessions:{}, enrollments:{}, records:{}, users:{}, fines:{} };
 var CUR_VIEW = '';
 
+// 내 기록 키: 우선 UID로 저장돼 있으면 UID, 없으면 옛 방식(이름)으로 호환 조회
+function myRecKey(sid){
+  var recs = DATA.records[sid] || {};
+  if(recs[UID] !== undefined) return UID;
+  if(recs[MY_NAME] !== undefined) return MY_NAME;
+  return UID; // 신규 기록은 UID로 저장
+}
+// 특정 강사(enrollment/기록)의 표시 이름 (동명이인 어드민 구분용)
+function userMemo(uid){
+  var u = DATA.users[uid];
+  return (u && u.memo) ? u.memo : '';
+}
+function userPhone4(uid){
+  var u = DATA.users[uid];
+  return (u && u.phone) ? u.phone : '';
+}
+
 function logout(){
   localStorage.removeItem('study_uid');
   localStorage.removeItem('study_name');
@@ -363,12 +401,48 @@ function subjectSessionCount(subject){
   });
   return n;
 }
-// 특정 과목의 보증금 총액 (= 회차 수 × 1만원)
+// 특정 과목의 정원 (세션에 저장된 capacity, 없거나 0이면 무제한 → null)
+function subjectCapacity(subject){
+  var cap = null;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    if(cap === null && typeof ses.capacity === 'number' && ses.capacity > 0) cap = ses.capacity;
+  });
+  return cap;
+}
+// 특정 과목의 현재 신청 인원
+function subjectEnrolledCount(subject){
+  var n = 0;
+  Object.keys(DATA.enrollments).forEach(function(k){
+    if(DATA.enrollments[k].subject === subject) n++;
+  });
+  return n;
+}
+// 특정 과목이 마감되었는지 (정원이 있고, 신청 인원이 정원 이상)
+function subjectIsFull(subject){
+  var cap = subjectCapacity(subject);
+  if(cap === null) return false;
+  return subjectEnrolledCount(subject) >= cap;
+}
+
+// 특정 과목의 회차당 보증금 (세션에 저장된 roundPrice 우선, 없으면 기본 1만원)
+function subjectRoundPrice(subject){
+  var price = null;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    if(price === null && typeof ses.roundPrice === 'number') price = ses.roundPrice;
+  });
+  return (price === null) ? DEDUCT : price;
+}
+// 특정 과목의 보증금 총액 (= 회차 수 × 회차당 보증금)
 function subjectDeposit(subject){
-  return subjectSessionCount(subject) * DEDUCT;
+  return subjectSessionCount(subject) * subjectRoundPrice(subject);
 }
 // 특정 강사의 특정 과목 보증금 잔액 계산
-function calcDeposit(name, subject){
+// who: uid 또는 이름(레거시) 모두 허용
+function calcDeposit(who, subject){
   var deductions = 0;
   // 해당 과목의 모든 회차(세션)를 찾아서, 출석X AND 숙제X면 차감
   Object.keys(DATA.sessions).forEach(function(sid){
@@ -376,10 +450,18 @@ function calcDeposit(name, subject){
     if(ses.subject !== subject) return;
     // 마감 시간이 지난 세션만 정산 대상
     if(!isSessionClosed(ses)) return;
-    var rec = (DATA.records[sid] && DATA.records[sid][name]) || {};
+    var recsForSes = DATA.records[sid] || {};
+    // uid 키로 먼저, 없으면 이름 키로 호환 조회
+    var rec = recsForSes[who];
+    if(rec === undefined){
+      // who가 uid인데 기록은 이름키로 저장된 옛 데이터일 수 있음
+      var u = DATA.users[who];
+      if(u && recsForSes[u.name] !== undefined) rec = recsForSes[u.name];
+    }
+    rec = rec || {};
     var attended = !!rec.attended;
     var hw = !!rec.homework;
-    if(!attended && !hw) deductions += DEDUCT;
+    if(!attended && !hw) deductions += subjectRoundPrice(subject);
   });
   return Math.max(0, subjectDeposit(subject) - deductions);
 }
@@ -452,6 +534,7 @@ function fmtDate(d){
   return (dt.getMonth()+1)+'월 '+dt.getDate()+'일('+days[dt.getDay()]+')';
 }
 function won(n){ return n.toLocaleString('ko-KR') + '원'; }
+function wonShort(n){ return (n%10000===0) ? (n/10000)+'만원' : n.toLocaleString('ko-KR')+'원'; }
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 // 회차 라벨 (예: "3/5회차"), 없으면 빈 문자열
 function roundLabel(ses){
@@ -478,7 +561,9 @@ function myEnrollments(){
   var list = [];
   Object.keys(DATA.enrollments).forEach(function(key){
     var e = DATA.enrollments[key];
-    if(e.name !== MY_NAME) return;
+    // UID가 있으면 UID로, 없으면 옛 데이터 호환을 위해 이름으로 매칭
+    var mine = e.uid ? (e.uid === UID) : (e.name === MY_NAME);
+    if(!mine) return;
     // 실제 회차(세션)가 남아 있는 과목만 (삭제된 스터디는 제외)
     if(subjectSessionCount(e.subject) === 0) return;
     list.push(e);
@@ -503,7 +588,7 @@ function renderTeacherHome(app){
   var totalDeposit = 0, totalRemain = 0, totalRefunded = 0;
   enrolls.forEach(function(e){
     totalDeposit += subjectDeposit(e.subject);
-    var remain = calcDeposit(MY_NAME, e.subject);
+    var remain = calcDeposit(UID, e.subject);
     if(e.refunded){
       totalRefunded += remain;   // 이미 환급 완료된 건 예상액에서 제외
     } else {
@@ -555,14 +640,87 @@ function renderTeacherHome(app){
     });
   }
 
+  // ===== 신청 가능한 스터디 (아직 신청 안 한 과목) =====
+  var allSubjects = {};
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var s = DATA.sessions[sid];
+    if(isSubjectEnded(s.subject)) return; // 종료된 스터디 제외
+    allSubjects[s.subject] = true;
+  });
+  var availSubjects = Object.keys(allSubjects).filter(function(s){ return mySubjects.indexOf(s) < 0; });
+  // 가장 빠른 회차 날짜 기준 정렬
+  availSubjects.sort(function(a,b){
+    function firstDate(sub){
+      var ds = [];
+      Object.keys(DATA.sessions).forEach(function(sid){ if(DATA.sessions[sid].subject===sub) ds.push(DATA.sessions[sid].date); });
+      ds.sort(); return ds[0] || '9999';
+    }
+    return firstDate(a).localeCompare(firstDate(b));
+  });
+
+  if(availSubjects.length){
+    html += '<div class="section-title">신청 가능한 스터디</div>';
+    availSubjects.forEach(function(sub){
+      var rounds = subjectSessionCount(sub);
+      var price = subjectRoundPrice(sub);
+      var cap = subjectCapacity(sub);
+      var cnt = subjectEnrolledCount(sub);
+      var full = subjectIsFull(sub);
+      // 대표 제목 (첫 회차)
+      var title = sub, descTxt = '';
+      var firstDate = '9999';
+      Object.keys(DATA.sessions).forEach(function(sid){
+        var s = DATA.sessions[sid];
+        if(s.subject !== sub) return;
+        if(s.date < firstDate){ firstDate = s.date; title = s.title || sub; descTxt = s.desc || ''; }
+      });
+
+      html += '<div class="sess">';
+      html += '<span class="subj">'+escapeHtml(sub)+'</span>';
+      html += '<div class="title" style="margin-top:8px;">'+escapeHtml(title)+'</div>';
+      html += '<div class="meta">'+rounds+'회차 · 회차당 '+wonShort(price)+'</div>';
+
+      if(cap !== null){
+        var left = Math.max(0, cap - cnt);
+        var pct = Math.min(100, Math.round(cnt/cap*100));
+        var barCls = full ? 'capbar-full' : (left<=2 ? 'capbar-low' : '');
+        var lblColor = full ? 'var(--danger)' : (left<=2 ? 'var(--warn)' : 'var(--point)');
+        var lblText = full ? '정원 마감' : '자리 '+left+'개 남음';
+        html += '<div class="capbar '+barCls+'"><i style="width:'+pct+'%"></i></div>';
+        html += '<div class="caplbl"><span class="n">신청 '+cnt+' / '+cap+'명</span><span style="color:'+lblColor+';font-weight:800;">'+lblText+'</span></div>';
+      } else {
+        html += '<div class="meta" style="margin-top:6px;">신청 '+cnt+'명 · 인원 제한 없음</div>';
+      }
+
+      if(full){
+        html += '<button class="act-btn disabled" disabled style="margin-top:10px;">신청 마감</button>';
+      } else {
+        html += '<button class="act-btn active" style="margin-top:10px;" onclick="quickEnroll(\''+encodeURIComponent(sub)+'\')">신청하기</button>';
+      }
+      html += '</div>';
+    });
+  }
+
   if(!enrolls.length){
     html += '<div class="section-title">스터디 신청</div>';
     html += '<div class="card"><div style="font-size:13px;color:var(--ink2);margin-bottom:12px;">아직 신청한 과목이 없습니다. 스터디에 참여하려면 과목을 신청하세요.</div>';
     html += '<button class="btn" onclick="openEnrollModal()">+ 스터디 신청하기</button></div>';
-  } else {
-    html += '<button class="btn sec" style="margin-top:8px;" onclick="openEnrollModal()">+ 다른 과목 추가 신청</button>';
+  } else if(availSubjects.length){
+    html += '<button class="btn sec" style="margin-top:8px;" onclick="openEnrollModal()">+ 과목 선택해서 신청</button>';
   }
   app.innerHTML = html;
+}
+
+// 홈 카드에서 바로 신청 — 해당 과목을 선택한 상태로 신청 모달 열기
+function quickEnroll(encSub){
+  var sub = decodeURIComponent(encSub);
+  openEnrollModal();
+  var sel = document.getElementById('enr-subject');
+  if(sel){
+    // 마감되지 않았으면 해당 과목 선택
+    var has = Array.prototype.some.call(sel.options, function(o){ return o.value === sub && !o.disabled; });
+    if(has){ sel.value = sub; updateEnrollDeposit(); }
+  }
 }
 
 function renderTeacherAttend(app){
@@ -590,7 +748,7 @@ function renderTeacherAttend(app){
 
   todaySessions.forEach(function(ses){
     var state = attendState(ses);
-    var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
+    var rec = (DATA.records[ses.id] && DATA.records[ses.id][myRecKey(ses.id)]) || {};
     var attended = !!rec.attended;
     var badge = state==='open' ? '<span class="badge-time open">출석 가능</span>'
               : state==='before' ? '<span class="badge-time before">'+ATTEND_START+' 시작</span>'
@@ -618,10 +776,10 @@ function checkAttend(sid){
   if(attendState(ses) !== 'open'){ toast('출석 가능 시간이 아닙니다'); return; }
   var ref = db.ref('study_records/'+sid+'/'+UID);
   var now = new Date().toISOString();
-  ref.update({ attended:true, attendedAt:now, name:MY_NAME }, function(err){
+  ref.update({ attended:true, attendedAt:now, name:MY_NAME, uid:UID }, function(err){
     if(err){ toast('오류: 다시 시도해주세요'); return; }
     if(!DATA.records[sid]) DATA.records[sid] = {};
-    DATA.records[sid][MY_NAME] = Object.assign(DATA.records[sid][MY_NAME]||{}, {attended:true, attendedAt:now, name:MY_NAME});
+    DATA.records[sid][UID] = Object.assign(DATA.records[sid][UID]||{}, {attended:true, attendedAt:now, name:MY_NAME, uid:UID});
     toast('출석 완료! ✅');
     renderView(CUR_VIEW);
   });
@@ -657,7 +815,7 @@ function renderTeacherHw(app){
     app.innerHTML = html; return;
   }
   sessions.forEach(function(ses){
-    var rec = (DATA.records[ses.id] && DATA.records[ses.id][MY_NAME]) || {};
+    var rec = (DATA.records[ses.id] && DATA.records[ses.id][myRecKey(ses.id)]) || {};
     var hw = !!rec.homework;
     var state = hwState(ses);
     var w = hwWindow(ses);
@@ -762,16 +920,16 @@ function uploadHw(sid){
         done++;
         if(done === files.length){
           // 기존에 올린 사진이 있으면 뒤에 이어붙임
-          var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
+          var rec = (DATA.records[sid] && DATA.records[sid][myRecKey(sid)]) || {};
           var existing = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
           var all = existing.concat(photos);
           var now = new Date().toISOString();
           db.ref('study_records/'+sid+'/'+UID).update({
-            homework:true, homeworkPhotos:all, homeworkPhoto:all[0], homeworkAt:now, name:MY_NAME
+            homework:true, homeworkPhotos:all, homeworkPhoto:all[0], homeworkAt:now, name:MY_NAME, uid:UID
           }, function(err){
             if(err){ toast('업로드 실패'); return; }
             if(!DATA.records[sid]) DATA.records[sid]={};
-            DATA.records[sid][MY_NAME] = Object.assign(DATA.records[sid][MY_NAME]||{}, {homework:true, homeworkPhotos:all, homeworkPhoto:all[0], homeworkAt:now, name:MY_NAME});
+            DATA.records[sid][UID] = Object.assign(DATA.records[sid][UID]||{}, {homework:true, homeworkPhotos:all, homeworkPhoto:all[0], homeworkAt:now, name:MY_NAME, uid:UID});
             toast(all.length + '장 인증 완료! 📚');
             renderView(CUR_VIEW);
           });
@@ -783,19 +941,20 @@ function uploadHw(sid){
 }
 
 function viewHw(sid){
-  var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
+  var rec = (DATA.records[sid] && DATA.records[sid][myRecKey(sid)]) || {};
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
   showPhotoModal('내 숙제 ('+photos.length+'장)', photos);
 }
 
 // 어드민: 특정 강사의 숙제 사진 보기
-function viewHwAdmin(sid, encodedName){
-  var name = decodeURIComponent(encodedName);
-  var rec = (DATA.records[sid] && DATA.records[sid][name]) || {};
+function viewHwAdmin(sid, encodedKey){
+  var rkey = decodeURIComponent(encodedKey);
+  var rec = (DATA.records[sid] && DATA.records[sid][rkey]) || {};
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
-  showPhotoModal(name + ' 숙제 ('+photos.length+'장)', photos);
+  var who = rec.name || (DATA.users[rkey] && DATA.users[rkey].name) || rkey;
+  showPhotoModal(who + ' 숙제 ('+photos.length+'장)', photos);
 }
 
 // 사진을 앱 내 모달로 표시 (새 창 X)
@@ -851,7 +1010,7 @@ function renderTeacherDeposit(app){
   }
   var totalRemain = 0;
   enrolls.forEach(function(e){
-    var remain = calcDeposit(MY_NAME, e.subject);
+    var remain = calcDeposit(UID, e.subject);
     totalRemain += remain;
     var dep = subjectDeposit(e.subject);
     var deducted = dep - remain;
@@ -862,7 +1021,7 @@ function renderTeacherDeposit(app){
       var ses = DATA.sessions[sid];
       if(ses.subject !== e.subject) return;
       if(!isSessionClosed(ses)) return;
-      var rec = (DATA.records[sid] && DATA.records[sid][MY_NAME]) || {};
+      var rec = (DATA.records[sid] && DATA.records[sid][myRecKey(sid)]) || {};
       var ok = rec.attended || rec.homework;
       detail.push({title:ses.title||ses.subject, date:ses.date, ok:ok, att:!!rec.attended, hw:!!rec.homework});
     });
@@ -879,7 +1038,7 @@ function renderTeacherDeposit(app){
     if(detail.length){
       html += '<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px;">';
       detail.forEach(function(d){
-        var mark = d.ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-1만원</span>';
+        var mark = d.ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-'+wonShort(subjectRoundPrice(e.subject))+'</span>';
         var sub = (d.att?'출석 ':'')+(d.hw?'숙제':'')||'미인증';
         html += '<div class="card-row" style="padding:5px 0;font-size:12px;"><span>'+fmtDate(d.date)+' · <span style="color:var(--muted)">'+sub+'</span></span>'+mark+'</div>';
       });
@@ -901,9 +1060,21 @@ function renderTeacherDeposit(app){
 function updateEnrollDeposit(){
   var subject = document.getElementById('enr-subject').value;
   var info = document.getElementById('enr-deposit-info');
+  var rp = document.getElementById('enr-roundprice-note');
+  var dn = document.getElementById('enr-deduct-note');
   if(!subject || !info){ if(info) info.textContent=''; return; }
   var rounds = subjectSessionCount(subject);
-  info.textContent = '입금할 보증금: ' + won(subjectDeposit(subject)) + ' (' + rounds + '회차)';
+  var capLine = '';
+  var cap = subjectCapacity(subject);
+  if(cap !== null){
+    var cnt = subjectEnrolledCount(subject);
+    var left = Math.max(0, cap - cnt);
+    capLine = ' · 정원 '+cnt+'/'+cap+'명'+(left>0?' (자리 '+left+'개 남음)':' (마감)');
+  }
+  info.textContent = '입금할 보증금: ' + won(subjectDeposit(subject)) + ' (' + rounds + '회차)' + capLine;
+  var price = subjectRoundPrice(subject);
+  if(rp) rp.textContent = '회차당 ' + wonShort(price);
+  if(dn) dn.textContent = '회차당 ' + wonShort(price);
 }
 
 function openEnrollModal(){
@@ -916,7 +1087,16 @@ function openEnrollModal(){
   if(!avail.length){
     sel.innerHTML = '<option value="">신청 가능한 과목이 없습니다</option>';
   } else {
-    sel.innerHTML = avail.map(function(s){ return '<option value="'+s+'">'+s+'</option>'; }).join('');
+    sel.innerHTML = avail.map(function(s){
+      var cap = subjectCapacity(s);
+      var cnt = subjectEnrolledCount(s);
+      var full = subjectIsFull(s);
+      var capTxt = (cap !== null) ? (' ('+cnt+'/'+cap+'명'+(full?' · 마감':'')+')') : '';
+      return '<option value="'+s+'"'+(full?' disabled':'')+'>'+s+capTxt+'</option>';
+    }).join('');
+    // 첫 번째로 선택 가능한(마감 아닌) 과목을 기본 선택
+    var firstOpen = avail.filter(function(s){ return !subjectIsFull(s); })[0];
+    if(firstOpen) sel.value = firstOpen;
   }
   sel.onchange = updateEnrollDeposit;
   // 기존에 입력한 환급 계좌가 있으면 채워넣기
@@ -926,26 +1106,70 @@ function openEnrollModal(){
   openModal('modal-enroll');
 }
 
+// 보증금 입금 계좌번호(숫자만) 복사
+var DEPOSIT_ACCOUNT_NUMBER = '1000-6131-1749';
+function copyDepositAccount(){
+  var text = DEPOSIT_ACCOUNT_NUMBER;
+  var btn = document.getElementById('copy-acct-btn');
+  function done(ok){
+    if(ok){
+      if(btn){ btn.textContent = '✓ 복사됨'; btn.style.background = '#dcfce7'; btn.style.borderColor = '#86efac'; btn.style.color = '#15803d'; }
+      toast('계좌번호가 복사되었습니다');
+      setTimeout(function(){
+        if(btn){ btn.textContent = '📋 복사'; btn.style.background = 'var(--ok-bg)'; btn.style.borderColor = 'var(--point)'; btn.style.color = 'var(--point)'; }
+      }, 1500);
+    } else {
+      toast('복사 실패 — 길게 눌러 복사해주세요');
+    }
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ fallbackCopy(text, done); });
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, cb){
+  try{
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    cb(ok);
+  }catch(e){ cb(false); }
+}
+
 function saveEnroll(){
   var subject = document.getElementById('enr-subject').value;
   var account = document.getElementById('enr-account').value.trim();
   if(!subject){ toast('신청할 과목이 없습니다'); return; }
   if(!account){ toast('환급받을 계좌를 입력해주세요'); return; }
-  var key = UID + '_' + subject.replace(/[.#$\[\]\/]/g,'_');
-  var enroll = { name:MY_NAME, subject:subject, deposit:subjectDeposit(subject), enrolledAt:new Date().toISOString() };
-  // 신청 정보 + 계좌(사용자 정보)를 함께 저장
-  db.ref('study_enrollments/'+key).set(enroll, function(err){
-    if(err){ toast('신청 실패'); return; }
-    DATA.enrollments[key] = enroll;
-    db.ref('study_users/'+UID+'/account').set(account, function(){
-      if(!DATA.users[UID]) DATA.users[UID] = {};
-      DATA.users[UID].account = account;
-      closeModal('modal-enroll');
-      toast('스터디 신청 완료! 💰');
-      if(MY_ROLE !== 'admin'){
-        notifyTelegram('💰 스터디 신청\n'+MY_NAME+' 강사 · '+subject+'\n보증금 '+subjectDeposit(subject).toLocaleString()+'원');
-      }
-      showView('t-home');
+  // 최신 데이터로 마감 여부 재확인 (다른 사람이 먼저 채웠을 수 있음)
+  db.ref('study_enrollments').once('value', function(snap){
+    DATA.enrollments = snap.val() || {};
+    if(subjectIsFull(subject)){
+      toast('정원이 마감되었습니다');
+      openEnrollModal();
+      return;
+    }
+    var key = UID + '_' + subject.replace(/[.#$\[\]\/]/g,'_');
+    var enroll = { name:MY_NAME, uid:UID, subject:subject, deposit:subjectDeposit(subject), enrolledAt:new Date().toISOString() };
+    // 신청 정보 + 계좌(사용자 정보)를 함께 저장
+    db.ref('study_enrollments/'+key).set(enroll, function(err){
+      if(err){ toast('신청 실패'); return; }
+      DATA.enrollments[key] = enroll;
+      db.ref('study_users/'+UID+'/account').set(account, function(){
+        if(!DATA.users[UID]) DATA.users[UID] = {};
+        DATA.users[UID].account = account;
+        closeModal('modal-enroll');
+        toast('스터디 신청 완료! 💰');
+        if(MY_ROLE !== 'admin'){
+          notifyTelegram('💰 스터디 신청\n'+MY_NAME+' 강사 · '+subject+'\n보증금 '+subjectDeposit(subject).toLocaleString()+'원');
+        }
+        showView('t-home');
+      });
     });
   });
 }
@@ -1039,12 +1263,21 @@ function renderAdminHome(app){
     var dates = g.sessions.map(function(s){ return s.date; }).sort();
     var rangeStr = fmtDate(dates[0]) + (total>1 ? ' ~ ' + fmtDate(dates[total-1]) : '');
     var endedBadge = groupEnded ? '<span class="badge-time closed" style="margin-left:6px;">종료됨</span>' : '';
+    // 정원/마감 표시
+    var capInfo = '';
+    var capBadge = '';
+    var cap = subjectCapacity(first.subject);
+    if(cap !== null){
+      var cnt = subjectEnrolledCount(first.subject);
+      capInfo = ' · 신청 '+cnt+'/'+cap+'명';
+      if(cnt >= cap && !groupEnded) capBadge = '<span class="badge-time closed" style="margin-left:6px;background:var(--danger-bg);color:var(--danger);">마감</span>';
+    }
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+'</span>'+
+    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+capBadge+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div class="title" style="margin-top:2px;">'+(first.title||first.subject)+'</div>';
-    html += '<div class="meta" style="margin-top:4px;">'+total+'회차 · '+rangeStr+'</div>';
+    html += '<div class="meta" style="margin-top:4px;">'+total+'회차 · '+rangeStr+capInfo+'</div>';
     if(first.desc) html += '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(first.desc)+'</div>';
 
     // 상세: 회차별 현황 (기본 숨김)
@@ -1153,10 +1386,25 @@ function openSessionModal(){
   document.getElementById('ses-title').value = '';
   document.getElementById('ses-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('ses-count').value = '5';
+  document.getElementById('ses-price').value = '10000';
+  document.getElementById('ses-capacity').value = '';
   document.getElementById('ses-desc').value = '';
   document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'block';
+  document.getElementById('ses-price-field').style.display = 'block';
+  document.getElementById('ses-capacity-field').style.display = 'block';
+  updateDepositSummary();
   openModal('modal-session');
+}
+
+// 개설 모달 보증금 안내 갱신
+function updateDepositSummary(){
+  var el = document.getElementById('ses-deposit-summary');
+  if(!el) return;
+  var c = parseInt(document.getElementById('ses-count').value,10) || 1;
+  var p = parseInt(document.getElementById('ses-price').value,10) || 0;
+  function fmt(n){ return (n%10000===0) ? (n/10000)+'만원' : n.toLocaleString()+'원'; }
+  el.textContent = '회차당 '+fmt(p)+' ('+c+'회차 = 총 '+fmt(c*p)+')';
 }
 
 function openEditSession(sid){
@@ -1170,9 +1418,11 @@ function openEditSession(sid){
   document.getElementById('ses-title').value = ses.title || '';
   document.getElementById('ses-date').value = ses.date || '';
   document.getElementById('ses-desc').value = ses.desc || '';
-  // 회차 수정 시: 날짜는 보이고, 회차 수 칸만 숨김
+  // 회차 수정 시: 날짜는 보이고, 회차 수·보증금·정원 칸은 숨김(그룹 단위 값이므로)
   document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'none';
+  document.getElementById('ses-price-field').style.display = 'none';
+  document.getElementById('ses-capacity-field').style.display = 'none';
   openModal('modal-session');
 }
 
@@ -1203,6 +1453,10 @@ function saveSession(){
     var count = parseInt(document.getElementById('ses-count').value, 10) || 1;
     if(count < 1) count = 1;
     if(count > 20) count = 20;
+    var roundPrice = parseInt(document.getElementById('ses-price').value, 10);
+    if(isNaN(roundPrice) || roundPrice < 0) roundPrice = DEDUCT;
+    var capacity = parseInt(document.getElementById('ses-capacity').value, 10);
+    if(isNaN(capacity) || capacity < 0) capacity = 0;
     var groupId = 'g' + Date.now();
     var baseDate = new Date(date + 'T00:00:00');
     var saved = 0;
@@ -1213,7 +1467,7 @@ function saveSession(){
       var ref = db.ref('study_sessions').push();
       var ses = {
         subject:subject, title:title, date:dateStr, desc:desc,
-        groupId:groupId, round:(i+1), totalRounds:count,
+        groupId:groupId, round:(i+1), totalRounds:count, roundPrice:roundPrice, capacity:capacity,
         createdAt:new Date().toISOString()
       };
       (function(key, sesObj){
@@ -1262,9 +1516,13 @@ function openEditGroup(gid){
   document.getElementById('ses-title').value = first.title || '';
   document.getElementById('ses-date').value = first.date || '';
   document.getElementById('ses-desc').value = first.desc || '';
-  // 날짜·회차수 칸 숨김 (전체 공통정보만 수정)
+  // 날짜·회차수 칸 숨김 (전체 공통정보만 수정), 보증금은 그룹 전체에 적용되므로 표시
   document.getElementById('ses-date').parentElement.style.display = 'none';
   document.getElementById('ses-count').parentElement.style.display = 'none';
+  document.getElementById('ses-price-field').style.display = 'block';
+  document.getElementById('ses-price').value = (typeof first.roundPrice === 'number') ? first.roundPrice : DEDUCT;
+  document.getElementById('ses-capacity-field').style.display = 'block';
+  document.getElementById('ses-capacity').value = (typeof first.capacity === 'number' && first.capacity > 0) ? first.capacity : '';
   _editSessionId = null;
   openModal('modal-session');
 }
@@ -1274,6 +1532,10 @@ function saveEditGroup(){
   var title = document.getElementById('ses-title').value.trim();
   var desc = document.getElementById('ses-desc').value.trim();
   if(!subject){ toast('과목을 입력해주세요'); return; }
+  var roundPrice = parseInt(document.getElementById('ses-price').value, 10);
+  if(isNaN(roundPrice) || roundPrice < 0) roundPrice = DEDUCT;
+  var capacity = parseInt(document.getElementById('ses-capacity').value, 10);
+  if(isNaN(capacity) || capacity < 0) capacity = 0;
   // 그룹의 모든 회차에 적용
   var keys = [];
   Object.keys(DATA.sessions).forEach(function(sid){
@@ -1284,13 +1546,15 @@ function saveEditGroup(){
   if(!keys.length){ toast('스터디를 찾을 수 없습니다'); return; }
   var done = 0, fail = false;
   keys.forEach(function(sid){
-    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc }, function(err){
+    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity }, function(err){
       if(err) fail = true;
-      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc });
+      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity });
       done++;
       if(done === keys.length){
-        // 날짜 칸 다시 보이게 복구
+        // 날짜·보증금·정원 칸 다시 기본 상태로 복구
         document.getElementById('ses-date').parentElement.style.display = 'block';
+        document.getElementById('ses-price-field').style.display = 'block';
+        document.getElementById('ses-capacity-field').style.display = 'block';
         closeModal('modal-session');
         _editGroupId = null;
         toast(fail ? '일부 저장 실패' : '스터디 정보를 수정했습니다');
@@ -1333,30 +1597,40 @@ function renderAdminStatus(app){
       html += '<div class="section-title" style="margin-top:22px;color:var(--muted);">종료된 스터디</div>';
     }
     var endedBadge = g.ended ? '<span class="badge-time closed" style="margin-left:6px;">종료됨</span>' : '';
-    // 신청자
-    var enrolledNames = [];
+    // 신청자 — enrollment 객체 단위 (동명이인 분리)
+    var enrolls = [];
     Object.keys(DATA.enrollments).forEach(function(k){
-      if(DATA.enrollments[k].subject === first.subject) enrolledNames.push(DATA.enrollments[k].name);
+      var e = DATA.enrollments[k];
+      if(e.subject === first.subject) enrolls.push({ekey:k, e:e});
     });
+    // 정원/마감
+    var stCap = subjectCapacity(first.subject);
+    var stCapBadge = '';
+    var stCapInfo = '';
+    if(stCap !== null){
+      stCapInfo = ' / '+stCap+'명';
+      if(enrolls.length >= stCap && !g.ended) stCapBadge = '<span class="badge-time closed" style="margin-left:6px;background:var(--danger-bg);color:var(--danger);">마감</span>';
+    }
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+'</span>'+
+    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+stCapBadge+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div class="title" style="font-size:14px;margin-top:2px;">'+(first.title||first.subject)+'</div>';
-    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · 신청 '+enrolledNames.length+'명</div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · 신청 '+enrolls.length+stCapInfo+'명</div>';
 
     html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
 
     // 신청 강사 관리 (어드민이 신청 취소) — 보증금 얽힘 주의
     html += '<div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
     html += '<div style="font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:8px;">신청 강사 · 신청 취소</div>';
-    if(!enrolledNames.length){
+    if(!enrolls.length){
       html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
     } else {
-      enrolledNames.forEach(function(nm){
+      enrolls.forEach(function(it){
+        var lbl = adminNameLabel(it.e.uid, it.e.name);
         html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">'+
-          '<span style="font-size:13px;">'+nm+'</span>'+
-          '<button class="act-btn" style="padding:4px 12px;font-size:12px;background:var(--danger);color:#fff;width:auto;" onclick="cancelEnroll(\''+encodeURIComponent(nm)+'\',\''+encodeURIComponent(first.subject)+'\')">신청 취소</button>'+
+          '<span style="font-size:13px;">'+lbl+'</span>'+
+          '<button class="act-btn" style="padding:4px 12px;font-size:12px;background:var(--danger);color:#fff;width:auto;" onclick="cancelEnroll(\''+encodeURIComponent(it.ekey)+'\')">신청 취소</button>'+
           '</div>';
       });
     }
@@ -1368,22 +1642,24 @@ function renderAdminStatus(app){
       var hwCount = Object.keys(recs).filter(function(n){ return recs[n].homework; }).length;
       html += '<div style="border-top:1px solid var(--line);padding-top:10px;margin-top:10px;">'+
         '<div style="font-size:13px;font-weight:700;margin-bottom:6px;">'+(ses.round||'?')+'회차 · '+fmtDate(ses.date)+' <span style="font-weight:400;color:var(--muted);font-size:11px;">(출석 '+attendCount+' · 숙제 '+hwCount+')</span></div>';
-      if(!enrolledNames.length){
+      if(!enrolls.length){
         html += '<div style="font-size:12px;color:var(--muted)">신청자가 없습니다</div>';
       } else {
         html += '<div class="tbl-wrap"><table class="tbl"><tr><th>강사</th><th>출석</th><th>숙제</th><th>상태</th></tr>';
-        enrolledNames.forEach(function(name){
-          var r = recs[name] || {};
+        enrolls.forEach(function(it){
+          // 이 강사 기록: uid 키 우선, 없으면 이름 키(레거시)
+          var rkey = (recs[it.e.uid]!==undefined) ? it.e.uid : it.e.name;
+          var r = recs[rkey] || {};
           var att = r.attended ? '<span class="pill o">O</span>' : '<span class="pill x">X</span>';
           var photoCount = (r.homeworkPhotos ? r.homeworkPhotos.length : (r.homeworkPhoto ? 1 : 0));
           var hw = r.homework
-            ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+photoCount+'장</span>'
+            ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(rkey)+'\')">📷 '+photoCount+'장</span>'
             : '<span class="pill x">X</span>';
           var ok = (r.attended || r.homework);
           var closed = isSessionClosed(ses);
           var status = !closed ? '<span style="color:var(--muted);font-size:11px">진행중</span>'
-                     : ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-1만원</span>';
-          html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td><td>'+status+'</td></tr>';
+                     : ok ? '<span class="pill o">유지</span>' : '<span class="pill x">-'+wonShort(subjectRoundPrice(first.subject))+'</span>';
+          html += '<tr><td class="name">'+adminNameLabel(it.e.uid, it.e.name)+'</td><td>'+att+'</td><td>'+hw+'</td><td>'+status+'</td></tr>';
         });
         html += '</table></div>';
       }
@@ -1406,46 +1682,46 @@ function toggleStatus(rowId){
 }
 
 function renderAdminSettle(app){
-  // 강사별 × 과목별 보증금 정산
-  var rows = {}; // name -> {subject -> remain}
+  // 강사별(계정 단위) × 과목별 보증금 정산 — enrollment 키로 식별 (동명이인 분리)
+  // 그룹키 = enrollment의 uid(있으면) 또는 name(레거시). 한 계정 아래 과목들을 묶음
+  var groups = {}; // groupKey -> {name, uid, items:[{ekey, subject, remain, enr}]}
   Object.keys(DATA.enrollments).forEach(function(k){
     var e = DATA.enrollments[k];
-    if(!rows[e.name]) rows[e.name] = {};
-    rows[e.name][e.subject] = calcDeposit(e.name, e.subject);
+    if(subjectSessionCount(e.subject) === 0) return; // 삭제된 스터디 제외
+    var who = e.uid || e.name;
+    var gk = e.uid || ('name_' + e.name);
+    if(!groups[gk]) groups[gk] = { name:e.name, uid:e.uid||null, items:[] };
+    groups[gk].items.push({
+      ekey:k, subject:e.subject,
+      remain: calcDeposit(who, e.subject),
+      enr:e
+    });
   });
-  var names = Object.keys(rows);
+  var gkeys = Object.keys(groups);
 
   var html = '<div class="section-title">보증금 정산표</div>';
-  if(!names.length){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
+  if(!gkeys.length){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
 
-  var totalPaidAll = 0;    // 실제 입금된 보증금 전체
-  var depositRemaining = 0;// 입금됐는데 아직 환급 안 된 금액
-  var totalRemain = 0;     // 환급 예정액 (입금된 것 중, 아직 환급 안 한 것)
-  var totalRefunded = 0;   // 환급 완료된 금액
+  var totalPaidAll = 0, depositRemaining = 0, totalRemain = 0, totalRefunded = 0;
   Object.keys(DATA.enrollments).forEach(function(k){
     var e = DATA.enrollments[k];
-    // 실제로 입금 확인된 사람만 돈 계산에 포함 (입금 대기는 0)
+    if(subjectSessionCount(e.subject) === 0) return;
     if(!e.paid) return;
-    var remain = calcDeposit(e.name, e.subject);       // 돌려줄 환급액 (결석/숙제 차감 반영됨)
-    var paidAmt = subjectDeposit(e.subject);           // 받은 보증금
+    var who = e.uid || e.name;
+    var remain = calcDeposit(who, e.subject);
+    var paidAmt = subjectDeposit(e.subject);
     totalPaidAll += paidAmt;
-    if(e.refunded){
-      totalRefunded += remain;       // 환급 완료
-    } else {
-      depositRemaining += paidAmt;   // 아직 환급 안 함 → 보유 중
-      totalRemain += remain;         // 환급 예정
-    }
+    if(e.refunded){ totalRefunded += remain; }
+    else { depositRemaining += paidAmt; totalRemain += remain; }
   });
 
-  // 벌금 = 받은 보증금 − 환급 예정(아직 환급 안 한 것) − 환급 완료액
-  // = 결석/숙제 미인증으로 깎인 차액의 합. 입금된 사람만 대상.
-  var finePool = totalPaidAll - totalRemain - totalRefunded;   // 모인 벌금(환급 후 남은 차액)
+  var finePool = totalPaidAll - totalRemain - totalRefunded;
   var fineUsed = 0;
   Object.keys(DATA.fines).forEach(function(fk){
     var f = DATA.fines[fk];
     if(f && typeof f.amount === 'number') fineUsed += f.amount;
   });
-  var fineRemain = finePool - fineUsed;          // 현재 쓸 수 있는 벌금 잔액
+  var fineRemain = finePool - fineUsed;
 
   html += '<div class="stat-grid">';
   html += '<div class="stat" style="cursor:pointer;" onclick="showPaidList()"><div class="label">입금된 보증금 ›</div><div class="num">'+won(depositRemaining)+'</div><div class="sub" style="color:var(--point)">눌러서 입금 내역 보기</div></div>';
@@ -1456,27 +1732,27 @@ function renderAdminSettle(app){
   html += '</div>';
 
   html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사 / 과목</th><th>환급액</th><th>입금</th><th>환급</th></tr>';
-  names.forEach(function(n){
-    var subjects = Object.keys(rows[n]);
-    var acc = accountByName(n);
-    subjects.forEach(function(s, i){
-      var remain = rows[n][s];
-      var deduct = subjectDeposit(s) - remain;
-      var key = enrollKey(n, s);
-      var enr = key ? DATA.enrollments[key] : {};
-      var paid = !!enr.paid;
-      var refunded = !!enr.refunded;
-      var paidBtn = '<span class="pill '+(paid?'o':'x')+'" style="cursor:pointer" onclick="togglePaid(\''+encodeURIComponent(n)+'\',\''+encodeURIComponent(s)+'\')">'+(paid?'완료':'대기')+'</span>';
-      var refBtn = '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer" onclick="toggleRefunded(\''+encodeURIComponent(n)+'\',\''+encodeURIComponent(s)+'\')">'+(refunded?'완료':'대기')+'</span>';
+  gkeys.forEach(function(gk){
+    var g = groups[gk];
+    var acc = g.uid ? ((DATA.users[g.uid]&&DATA.users[g.uid].account)||'') : accountByName(g.name);
+    // 동명이인 구분 라벨: 같은 이름이 둘 이상이면 뒷자리/메모 표시
+    var nameLabel = adminNameLabel(g.uid, g.name);
+    g.items.forEach(function(it){
+      var remain = it.remain;
+      var deduct = subjectDeposit(it.subject) - remain;
+      var enr = it.enr;
+      var paid = !!enr.paid, refunded = !!enr.refunded;
+      var ek = encodeURIComponent(it.ekey);
+      var paidBtn = '<span class="pill '+(paid?'o':'x')+'" style="cursor:pointer" onclick="togglePaid(\''+ek+'\')">'+(paid?'완료':'대기')+'</span>';
+      var refBtn = '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer" onclick="toggleRefunded(\''+ek+'\')">'+(refunded?'완료':'대기')+'</span>';
       var remainCell = refunded
         ? '<span style="text-decoration:line-through;color:var(--muted)">'+won(remain)+'</span>'
         : '<span style="font-weight:800;color:var(--point)">'+won(remain)+'</span>';
-      html += '<tr><td class="name"><span style="color:var(--muted);font-size:11px">'+n+'</span><br>'+s+(deduct>0?' <span style="color:var(--danger);font-size:10px">(-'+won(deduct)+')</span>':'')+'</td>'+
+      html += '<tr><td class="name"><span style="color:var(--muted);font-size:11px">'+nameLabel+'</span><br>'+escapeHtml(it.subject)+(deduct>0?' <span style="color:var(--danger);font-size:10px">(-'+won(deduct)+')</span>':'')+'</td>'+
         '<td>'+remainCell+'</td>'+
         '<td>'+paidBtn+'</td><td>'+refBtn+'</td></tr>';
     });
-    // 강사별 환급 계좌 행
-    html += '<tr><td colspan="4" style="text-align:left;background:var(--bg);font-size:11px;color:var(--ink2);padding:6px 10px;">💳 '+(acc||'<span style="color:var(--muted)">환급 계좌 미등록</span>')+'</td></tr>';
+    html += '<tr><td colspan="4" style="text-align:left;background:var(--bg);font-size:11px;color:var(--ink2);padding:6px 10px;">💳 '+(acc||'<span style="color:var(--muted)">환급 계좌 미등록</span>')+(g.uid?' <span style="cursor:pointer;color:var(--point);font-size:11px;margin-left:6px;" onclick="openMemoModal(\''+g.uid+'\')">구분메모 ✎</span>':'')+'</td></tr>';
   });
   html += '</table></div>';
   html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 입금/환급의 "대기"를 누르면 "완료"로 바뀝니다.<br>※ 송금은 토스에서 직접 하고, 여기서 처리 상태만 기록하세요.<br>※ 종료된 스터디만 정산 금액에 반영됩니다.</div>';
@@ -1519,7 +1795,7 @@ function showPaidList(){
   Object.keys(DATA.enrollments).forEach(function(k){
     var e = DATA.enrollments[k];
     if(!e.paid) return;
-    list.push({ name:e.name, subject:e.subject, amount:subjectDeposit(e.subject), paidAt:e.paidAt||'', refunded:!!e.refunded });
+    list.push({ name:e.name, uid:e.uid||null, subject:e.subject, amount:subjectDeposit(e.subject), paidAt:e.paidAt||'', refunded:!!e.refunded });
   });
   // 최신순 정렬 (시점 없는 건 뒤로)
   list.sort(function(a,b){
@@ -1543,7 +1819,7 @@ function showPaidList(){
       var refTag = it.refunded ? ' <span style="font-size:10px;color:var(--muted);">환급됨</span>' : '';
       h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;">'+
-        '<span style="font-weight:700;font-size:14px;">'+escapeHtml(it.name)+refTag+'</span>'+
+        '<span style="font-weight:700;font-size:14px;">'+adminNameLabel(it.uid, it.name)+refTag+'</span>'+
         '<span style="font-weight:800;'+amtStyle+'">'+won(it.amount)+'</span></div>'+
         '<div style="font-size:11px;color:var(--muted);margin-top:3px;">'+escapeHtml(it.subject)+' · '+when+'</div></div>';
     });
@@ -1569,10 +1845,10 @@ function showFineSource(){
     var e = DATA.enrollments[k];
     if(!e.paid || !e.refunded) return;
     var paidAmt = subjectDeposit(e.subject);
-    var refundAmt = calcDeposit(e.name, e.subject);
+    var refundAmt = calcDeposit(e.uid || e.name, e.subject);
     var fine = paidAmt - refundAmt;       // 벌금으로 들어온 차액
     if(fine > 0){
-      sources.push({ name:e.name, subject:e.subject, paid:paidAmt, refund:refundAmt, fine:fine, at:e.paidAt||'' });
+      sources.push({ name:e.name, uid:e.uid||null, subject:e.subject, paid:paidAmt, refund:refundAmt, fine:fine, at:e.paidAt||'' });
     }
   });
   sources.sort(function(a,b){
@@ -1606,7 +1882,7 @@ function showFineSource(){
     sources.forEach(function(it){
       h += '<div style="border:1px solid var(--line);border-radius:10px;padding:11px 13px;">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;">'+
-        '<span style="font-weight:700;font-size:14px;">'+escapeHtml(it.name)+'</span>'+
+        '<span style="font-weight:700;font-size:14px;">'+adminNameLabel(it.uid, it.name)+'</span>'+
         '<span style="font-weight:800;color:var(--warn);">+'+won(it.fine)+'</span></div>'+
         '<div style="font-size:11px;color:var(--muted);margin-top:3px;">'+escapeHtml(it.subject)+' · 입금 '+won(it.paid)+' / 환급 '+won(it.refund)+'</div></div>';
     });
@@ -1723,6 +1999,43 @@ function accountByName(name){
   return found;
 }
 
+// 어드민 화면용 강사 라벨: 같은 이름이 둘 이상일 때만 뒷자리/메모로 구분 표시
+function adminNameLabel(uid, name){
+  var sameName = [];
+  Object.keys(DATA.users).forEach(function(k){
+    var u = DATA.users[k];
+    if(u && u.name === name) sameName.push(k);
+  });
+  var label = escapeHtml(name);
+  if(uid && sameName.length > 1){
+    var u = DATA.users[uid] || {};
+    var bits = [];
+    if(u.phone) bits.push('뒷자리 '+u.phone);
+    if(u.memo) bits.push(escapeHtml(u.memo));
+    if(bits.length) label += ' <span style="color:var(--point);font-weight:700;">('+bits.join(' · ')+')</span>';
+  } else if(uid){
+    var u2 = DATA.users[uid] || {};
+    if(u2.memo) label += ' <span style="color:var(--point);font-weight:700;">('+escapeHtml(u2.memo)+')</span>';
+  }
+  return label;
+}
+
+// 어드민: 강사 구분 메모 달기/수정
+function openMemoModal(uid){
+  var u = DATA.users[uid] || {};
+  var cur = u.memo || '';
+  var nw = prompt(u.name+' 강사 구분 메모 (예: 월요반, 본관). 어드민 화면에서만 보입니다.', cur);
+  if(nw === null) return;
+  nw = nw.trim();
+  db.ref('study_users/'+uid+'/memo').set(nw, function(err){
+    if(err){ toast('메모 저장 실패'); return; }
+    if(!DATA.users[uid]) DATA.users[uid] = {};
+    DATA.users[uid].memo = nw;
+    toast(nw ? '메모 저장됨' : '메모 삭제됨');
+    renderView(CUR_VIEW);
+  });
+}
+
 // 강사+과목으로 enrollment 키 찾기
 function enrollKey(name, subject){
   var found = null;
@@ -1733,11 +2046,10 @@ function enrollKey(name, subject){
   return found;
 }
 
-// 입금 확인 토글 (어드민)
-function togglePaid(encName, encSubject){
-  var name = decodeURIComponent(encName), subject = decodeURIComponent(encSubject);
-  var key = enrollKey(name, subject);
-  if(!key) return;
+// 입금 확인 토글 (어드민) — enrollment 키 직접 사용
+function togglePaid(encKey){
+  var key = decodeURIComponent(encKey);
+  if(!key || !DATA.enrollments[key]) return;
   var cur = !!DATA.enrollments[key].paid;
   var next = !cur;
   var paidAt = next ? new Date().toISOString() : null;
@@ -1750,11 +2062,10 @@ function togglePaid(encName, encSubject){
   });
 }
 
-// 환급 완료 토글 (어드민)
-function toggleRefunded(encName, encSubject){
-  var name = decodeURIComponent(encName), subject = decodeURIComponent(encSubject);
-  var key = enrollKey(name, subject);
-  if(!key) return;
+// 환급 완료 토글 (어드민) — enrollment 키 직접 사용
+function toggleRefunded(encKey){
+  var key = decodeURIComponent(encKey);
+  if(!key || !DATA.enrollments[key]) return;
   var cur = !!DATA.enrollments[key].refunded;
   var next = !cur;
   db.ref('study_enrollments/'+key+'/refunded').set(next, function(err){
@@ -1766,11 +2077,11 @@ function toggleRefunded(encName, encSubject){
 }
 
 // ===== 어드민: 강사 신청 취소 (스터디에서 빼기) =====
-function cancelEnroll(encName, encSubject){
-  var name = decodeURIComponent(encName), subject = decodeURIComponent(encSubject);
-  var key = enrollKey(name, subject);
-  if(!key){ toast('신청 정보를 찾을 수 없습니다'); return; }
-  var e = DATA.enrollments[key] || {};
+function cancelEnroll(encKey){
+  var key = decodeURIComponent(encKey);
+  var e = DATA.enrollments[key];
+  if(!e){ toast('신청 정보를 찾을 수 없습니다'); return; }
+  var name = e.name, subject = e.subject;
   var warn = name + ' 강사의 [' + subject + '] 신청을 취소할까요?';
   if(e.paid && !e.refunded){
     warn += '\n\n⚠️ 이미 보증금이 입금된 강사입니다.\n취소하면 정산 목록에서 사라지니, 보증금 환급은 직접 처리해 주세요.';
@@ -1785,6 +2096,12 @@ function cancelEnroll(encName, encSubject){
 }
 
 // ===== 시작 =====
+(function(){
+  var cEl = document.getElementById('ses-count');
+  var pEl = document.getElementById('ses-price');
+  if(cEl) cEl.addEventListener('input', updateDepositSummary);
+  if(pEl) pEl.addEventListener('input', updateDepositSummary);
+})();
 loadAll(function(){ buildTabs(); startLive(); });
 </script>
 </body>
