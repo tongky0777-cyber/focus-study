@@ -87,6 +87,12 @@
   .caplbl{display:flex;justify-content:space-between;font-size:11px;margin-top:5px;}
   .caplbl .n{color:var(--ink2);font-weight:700;}
 
+  /* 남은 자리 배지 */
+  .left-pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:20px;}
+  .left-ok{background:var(--ok-bg);color:var(--point);}
+  .left-low{background:var(--warn-bg);color:var(--warn);}
+  .left-full{background:var(--danger-bg);color:var(--danger);}
+
   /* 사용 여부 토글 스위치 */
   .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--white);margin-bottom:8px;}
   .toggle-row .tt{font-size:14px;font-weight:700;color:var(--ink);}
@@ -95,6 +101,18 @@
   .sw.on{background:var(--point);}
   .sw b{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;}
   .sw.on b{left:21px;}
+
+  /* 스터디별 정산 박스 */
+  .study-box{background:var(--white);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden;}
+  .study-box-head{background:var(--main);color:#fff;padding:11px 14px;display:flex;justify-content:space-between;align-items:center;}
+  .study-box-head .sbh-name{font-size:14px;font-weight:800;}
+  .study-box-head .sbh-cnt{font-size:11px;opacity:.85;}
+  .study-box-sub{font-size:11px;color:var(--ink2);padding:8px 14px 2px;}
+  .ti-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-top:1px solid var(--line);}
+  .ti-row .ti-left{min-width:0;}
+  .ti-row .ti-name{font-size:14px;font-weight:700;color:var(--ink);}
+  .ti-row .ti-sub{margin-top:2px;}
+  .ti-row .ti-right{flex-shrink:0;display:flex;align-items:center;}
 
   /* 하단 탭 */
   .tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--white);border-top:1px solid var(--line);display:flex;z-index:50;max-width:760px;margin:0 auto;}
@@ -432,8 +450,26 @@ function subjectCapacity(subject){
   });
   return cap;
 }
-// 특정 과목의 현재 신청 인원
+// 특정 과목의 현재 참가 인원 (입금 확인 = 참가 확정된 사람만)
 function subjectEnrolledCount(subject){
+  var n = 0;
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(e.subject === subject && e.paid) n++;
+  });
+  return n;
+}
+// 특정 과목의 입금 대기(신청만 하고 미확인) 인원
+function subjectPendingCount(subject){
+  var n = 0;
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(e.subject === subject && !e.paid) n++;
+  });
+  return n;
+}
+// 특정 과목의 전체 신청 인원 (대기 + 확정)
+function subjectTotalCount(subject){
   var n = 0;
   Object.keys(DATA.enrollments).forEach(function(k){
     if(DATA.enrollments[k].subject === subject) n++;
@@ -603,7 +639,9 @@ function renderView(id){
 }
 
 // ============ 강사 화면 ============
-function myEnrollments(){
+function myEnrollments(opt){
+  // opt.paidOnly = true 면 입금 확인(참가 확정)된 것만
+  opt = opt || {};
   var list = [];
   Object.keys(DATA.enrollments).forEach(function(key){
     var e = DATA.enrollments[key];
@@ -612,9 +650,18 @@ function myEnrollments(){
     if(!mine) return;
     // 실제 회차(세션)가 남아 있는 과목만 (삭제된 스터디는 제외)
     if(subjectSessionCount(e.subject) === 0) return;
+    if(opt.paidOnly && !e.paid) return;
     list.push(e);
   });
   return list;
+}
+// 내가 입금 대기 중인(신청만 한) 과목
+function myPendingEnrollments(){
+  return myEnrollments().filter(function(e){ return !e.paid; });
+}
+// 내가 참가 확정된 과목
+function myPaidEnrollments(){
+  return myEnrollments({paidOnly:true});
 }
 
 // 과목(스터디)이 종료됐는지: 그 과목의 세션이 하나라도 진행중이면 진행중, 모두 ended면 종료
@@ -630,7 +677,8 @@ function isSubjectEnded(subject){
 }
 
 function renderTeacherHome(app){
-  var enrolls = myEnrollments();
+  var enrolls = myPaidEnrollments();       // 참가 확정(입금 확인)된 과목
+  var pending = myPendingEnrollments();    // 입금 대기 중인 과목
   var totalDeposit = 0, totalRemain = 0, totalRefunded = 0;
   enrolls.forEach(function(e){
     totalDeposit += subjectDeposit(e.subject);
@@ -642,7 +690,7 @@ function renderTeacherHome(app){
     }
   });
 
-  // 다가오는 스터디 — 과목(스터디)별로 하나만, 가장 가까운 다음 회차 기준
+  // 다가오는 스터디 — 확정된 과목만, 과목별 가장 가까운 다음 회차 기준
   var mySubjects = enrolls.map(function(e){ return e.subject; });
   var nextBySubject = {};
   Object.keys(DATA.sessions).forEach(function(sid){
@@ -669,9 +717,23 @@ function renderTeacherHome(app){
   html += '<div class="stat"><div class="label">예상 환급액</div><div class="num point">'+(totalRemain/10000)+'<span style="font-size:14px">만원</span></div><div class="sub">총 보증금 '+(totalDeposit/10000)+'만원'+(totalRefunded>0?' · 환급완료 '+(totalRefunded/10000)+'만원':'')+'</div></div>';
   html += '</div>';
 
+  // 입금 대기 중인 신청 (아직 참가 확정 안 됨)
+  if(pending.length){
+    html += '<div class="section-title">입금 대기 중</div>';
+    pending.forEach(function(e){
+      var dep = subjectDeposit(e.subject);
+      html += '<div class="sess" style="border-color:var(--warn);background:var(--warn-bg);">'+
+        '<div class="card-row"><span class="subj" style="background:var(--warn-bg);color:var(--warn);">'+escapeHtml(e.subject)+'</span>'+
+        '<span class="badge-time before" style="background:var(--warn-bg);color:var(--warn);">입금 확인 대기</span></div>'+
+        '<div class="meta" style="margin-top:6px;">보증금 '+won(dep)+'을 입금하면 원장님 확인 후 참가가 확정됩니다.</div>'+
+        '<div class="meta" style="color:var(--warn);font-weight:700;margin-top:4px;">확인 전까지는 출석·숙제 화면에 표시되지 않아요.</div>'+
+        '</div>';
+    });
+  }
+
   html += '<div class="section-title">다가오는 스터디</div>';
   if(!upcoming.length){
-    html += '<div class="empty">예정된 스터디가 없습니다</div>';
+    html += '<div class="empty">'+(enrolls.length?'예정된 스터디가 없습니다':'참가 확정된 스터디가 없습니다')+'</div>';
   } else {
     upcoming.forEach(function(ses){
       var uA = sesUseAttend(ses), uH = sesUseHw(ses);
@@ -782,7 +844,7 @@ function quickEnroll(encSub){
 }
 
 function renderTeacherAttend(app){
-  var enrolls = myEnrollments();
+  var enrolls = myPaidEnrollments();
   var mySubjects = enrolls.map(function(e){ return e.subject; });
   // 오늘 날짜의 세션
   var today = new Date().toISOString().slice(0,10);
@@ -845,7 +907,7 @@ function checkAttend(sid){
 }
 
 function renderTeacherHw(app){
-  var enrolls = myEnrollments();
+  var enrolls = myPaidEnrollments();
   var mySubjects = enrolls.map(function(e){ return e.subject; });
   // 마감 안 지난 + 오늘 이후 세션 위주로 숙제 업로드 가능
   var sessions = [];
@@ -1218,7 +1280,7 @@ function saveEnroll(){
       return;
     }
     var key = UID + '_' + subject.replace(/[.#$\[\]\/]/g,'_');
-    var enroll = { name:MY_NAME, uid:UID, subject:subject, deposit:subjectDeposit(subject), enrolledAt:new Date().toISOString() };
+    var enroll = { name:MY_NAME, uid:UID, subject:subject, deposit:subjectDeposit(subject), paid:false, enrolledAt:new Date().toISOString() };
     // 신청 정보 + 계좌(사용자 정보)를 함께 저장
     db.ref('study_enrollments/'+key).set(enroll, function(err){
       if(err){ toast('신청 실패'); return; }
@@ -1227,9 +1289,9 @@ function saveEnroll(){
         if(!DATA.users[UID]) DATA.users[UID] = {};
         DATA.users[UID].account = account;
         closeModal('modal-enroll');
-        toast('스터디 신청 완료! 💰');
+        toast('신청 완료! 입금 후 확인되면 참가 확정 💰');
         if(MY_ROLE !== 'admin'){
-          notifyTelegram('💰 스터디 신청\n'+MY_NAME+' 강사 · '+subject+'\n보증금 '+subjectDeposit(subject).toLocaleString()+'원');
+          notifyTelegram('💰 스터디 신청 (입금 확인 필요)\n'+MY_NAME+' 강사 · '+subject+'\n보증금 '+subjectDeposit(subject).toLocaleString()+'원');
         }
         showView('t-home');
       });
@@ -1326,21 +1388,43 @@ function renderAdminHome(app){
     var dates = g.sessions.map(function(s){ return s.date; }).sort();
     var rangeStr = fmtDate(dates[0]) + (total>1 ? ' ~ ' + fmtDate(dates[total-1]) : '');
     var endedBadge = groupEnded ? '<span class="badge-time closed" style="margin-left:6px;">종료됨</span>' : '';
-    // 정원/마감 표시
+    // 정원/마감 표시 (참가 확정 기준 + 대기 안내)
     var capInfo = '';
     var capBadge = '';
+    var cnt = subjectEnrolledCount(first.subject);
+    var pend = subjectPendingCount(first.subject);
     var cap = subjectCapacity(first.subject);
+    var leftBadge = '';
     if(cap !== null){
-      var cnt = subjectEnrolledCount(first.subject);
-      capInfo = ' · 신청 '+cnt+'/'+cap+'명';
+      var left = Math.max(0, cap - cnt);
+      capInfo = ' · 참가 '+cnt+'/'+cap+'명'+(pend>0?' · 대기 '+pend:'');
       if(cnt >= cap && !groupEnded) capBadge = '<span class="badge-time closed" style="margin-left:6px;background:var(--danger-bg);color:var(--danger);">마감</span>';
+      // 남은 자리 배지 (종료 안 된 스터디만)
+      if(!groupEnded){
+        var lc = left===0 ? 'left-full' : (left<=2 ? 'left-low' : 'left-ok');
+        var lt = left===0 ? '정원 마감' : '자리 '+left+'개 남음';
+        leftBadge = '<span class="left-pill '+lc+'" style="margin-left:6px;">'+lt+'</span>';
+      }
+    } else {
+      capInfo = ' · 참가 '+cnt+'명'+(pend>0?' · 대기 '+pend:'');
     }
+    if(pend>0 && !groupEnded) capBadge += ' <span class="badge-time before" style="margin-left:4px;background:var(--warn-bg);color:var(--warn);">입금대기 '+pend+'</span>';
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
-    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+capBadge+'</span>'+
+    html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+capBadge+leftBadge+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div class="title" style="margin-top:2px;">'+(first.title||first.subject)+'</div>';
     html += '<div class="meta" style="margin-top:4px;">'+total+'회차 · '+rangeStr+capInfo+'</div>';
+    // 정원이 있으면 진행 막대 표시 (참가 확정 기준)
+    if(cap !== null && !groupEnded){
+      var leftN = Math.max(0, cap - cnt);
+      var pct = Math.min(100, Math.round(cnt/cap*100));
+      var barCls = leftN===0 ? 'capbar-full' : (leftN<=2 ? 'capbar-low' : '');
+      var lblColor = leftN===0 ? 'var(--danger)' : (leftN<=2 ? 'var(--warn)' : 'var(--point)');
+      var lblText = leftN===0 ? '정원 마감' : '자리 '+leftN+'개 남음';
+      html += '<div class="capbar '+barCls+'"><i style="width:'+pct+'%"></i></div>';
+      html += '<div class="caplbl"><span class="n">참가 확정 '+cnt+' / 정원 '+cap+'</span><span style="color:'+lblColor+';font-weight:800;">'+lblText+'</span></div>';
+    }
     if(first.desc) html += '<div class="meta" style="margin-top:6px;white-space:pre-wrap;background:var(--bg);padding:8px 10px;border-radius:8px;">'+escapeHtml(first.desc)+'</div>';
 
     // 상세: 회차별 현황 (기본 숨김)
@@ -1688,20 +1772,31 @@ function renderAdminStatus(app){
       var e = DATA.enrollments[k];
       if(e.subject === first.subject) enrolls.push({ekey:k, e:e});
     });
-    // 정원/마감
+    // 정원/마감 (참가 확정 기준)
     var stCap = subjectCapacity(first.subject);
+    var stPaid = subjectEnrolledCount(first.subject);
+    var stPend = subjectPendingCount(first.subject);
     var stCapBadge = '';
-    var stCapInfo = '';
+    var stCntText;
     if(stCap !== null){
-      stCapInfo = ' / '+stCap+'명';
-      if(enrolls.length >= stCap && !g.ended) stCapBadge = '<span class="badge-time closed" style="margin-left:6px;background:var(--danger-bg);color:var(--danger);">마감</span>';
+      var stLeft = Math.max(0, stCap - stPaid);
+      stCntText = '참가 '+stPaid+'/'+stCap+'명'+(stPend>0?' · 대기 '+stPend:'');
+      if(stPaid >= stCap && !g.ended){
+        stCapBadge = '<span class="badge-time closed" style="margin-left:6px;background:var(--danger-bg);color:var(--danger);">마감</span>';
+      } else if(!g.ended){
+        var lc2 = stLeft<=2 ? 'left-low' : 'left-ok';
+        stCapBadge = '<span class="left-pill '+lc2+'" style="margin-left:6px;">자리 '+stLeft+'개 남음</span>';
+      }
+    } else {
+      stCntText = '참가 '+stPaid+'명'+(stPend>0?' · 대기 '+stPend:'');
     }
+    if(stPend>0 && !g.ended) stCapBadge += ' <span class="badge-time before" style="margin-left:4px;background:var(--warn-bg);color:var(--warn);">입금대기 '+stPend+'</span>';
 
     html += '<div class="card" style="cursor:pointer;" onclick="toggleStatus(\''+rowId+'\')">';
     html += '<div class="card-row"><span class="subj">'+first.subject+endedBadge+stCapBadge+'</span>'+
       '<span id="'+rowId+'-arrow" style="font-size:18px;color:var(--muted);transition:.2s;">▾</span></div>';
     html += '<div class="title" style="font-size:14px;margin-top:2px;">'+(first.title||first.subject)+'</div>';
-    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · 신청 '+enrolls.length+stCapInfo+'명</div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+g.sessions.length+'회차 · '+stCntText+'</div>';
 
     html += '<div id="'+rowId+'" style="display:none;margin-top:12px;" onclick="event.stopPropagation()">';
 
@@ -1773,25 +1868,12 @@ function toggleStatus(rowId){
 }
 
 function renderAdminSettle(app){
-  // 강사별(계정 단위) × 과목별 보증금 정산 — enrollment 키로 식별 (동명이인 분리)
-  // 그룹키 = enrollment의 uid(있으면) 또는 name(레거시). 한 계정 아래 과목들을 묶음
-  var groups = {}; // groupKey -> {name, uid, items:[{ekey, subject, remain, enr}]}
-  Object.keys(DATA.enrollments).forEach(function(k){
-    var e = DATA.enrollments[k];
-    if(subjectSessionCount(e.subject) === 0) return; // 삭제된 스터디 제외
-    var who = e.uid || e.name;
-    var gk = e.uid || ('name_' + e.name);
-    if(!groups[gk]) groups[gk] = { name:e.name, uid:e.uid||null, items:[] };
-    groups[gk].items.push({
-      ekey:k, subject:e.subject,
-      remain: calcDeposit(who, e.subject),
-      enr:e
-    });
+  var hasEnroll = Object.keys(DATA.enrollments).some(function(k){
+    return subjectSessionCount(DATA.enrollments[k].subject) > 0;
   });
-  var gkeys = Object.keys(groups);
 
   var html = '<div class="section-title">보증금 정산표</div>';
-  if(!gkeys.length){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
+  if(!hasEnroll){ html += '<div class="empty">신청 내역이 없습니다</div>'; app.innerHTML=html; return; }
 
   var totalPaidAll = 0, depositRemaining = 0, totalRemain = 0, totalRefunded = 0;
   Object.keys(DATA.enrollments).forEach(function(k){
@@ -1822,31 +1904,94 @@ function renderAdminSettle(app){
   html += '<div class="stat" style="grid-column:1/-1;cursor:pointer;" onclick="showFineSource()"><div class="label">벌금 잔액 (회식 등 사용 가능) ›</div><div class="num" style="color:var(--warn)">'+won(fineRemain)+'</div><div class="sub" style="color:var(--warn)">눌러서 벌금 출처 보기</div></div>';
   html += '</div>';
 
-  html += '<div class="tbl-wrap" style="margin-top:8px;"><table class="tbl"><tr><th>강사 / 과목</th><th>환급액</th><th>입금</th><th>환급</th></tr>';
-  gkeys.forEach(function(gk){
-    var g = groups[gk];
-    var acc = g.uid ? ((DATA.users[g.uid]&&DATA.users[g.uid].account)||'') : accountByName(g.name);
-    // 동명이인 구분 라벨: 같은 이름이 둘 이상이면 뒷자리/메모 표시
-    var nameLabel = adminNameLabel(g.uid, g.name);
-    g.items.forEach(function(it){
-      var remain = it.remain;
-      var deduct = subjectDeposit(it.subject) - remain;
+  html += '<div class="section-title" style="margin-top:8px;">스터디별 입금·정산</div>';
+
+  // ===== 스터디(과목)별로 묶기 =====
+  // subject -> { items:[{ekey, enr, uid, name, remain}] }
+  var byStudy = {};
+  Object.keys(DATA.enrollments).forEach(function(k){
+    var e = DATA.enrollments[k];
+    if(subjectSessionCount(e.subject) === 0) return;
+    if(!byStudy[e.subject]) byStudy[e.subject] = [];
+    var who = e.uid || e.name;
+    byStudy[e.subject].push({ ekey:k, enr:e, uid:e.uid||null, name:e.name, remain:calcDeposit(who, e.subject) });
+  });
+  // 종료 안 된 스터디 먼저, 그 안에서 이름순
+  var studyNames = Object.keys(byStudy).sort(function(a,b){
+    var ea = isSubjectEnded(a)?1:0, eb = isSubjectEnded(b)?1:0;
+    if(ea !== eb) return ea - eb;
+    return a.localeCompare(b);
+  });
+
+  studyNames.forEach(function(sub){
+    var items = byStudy[sub];
+    // 대기(미입금) 먼저 보이게 정렬
+    items.sort(function(a,b){
+      var pa = a.enr.paid?1:0, pb = b.enr.paid?1:0;
+      if(pa !== pb) return pa - pb;
+      return a.name.localeCompare(b.name);
+    });
+    var paidCnt = items.filter(function(it){ return it.enr.paid; }).length;
+    var pendingCnt = items.length - paidCnt;
+    var ended = isSubjectEnded(sub);
+    var cap = subjectCapacity(sub);
+    var dep = subjectDeposit(sub);
+
+    html += '<div class="study-box">';
+    var headCnt;
+    if(cap !== null){
+      var leftS = Math.max(0, cap - paidCnt);
+      headCnt = '입금 '+paidCnt+' / 정원 '+cap+(ended?'명':(leftS===0?'명 · 마감':'명 · 자리 '+leftS+'개'));
+    } else {
+      headCnt = '입금 '+paidCnt+'명';
+    }
+    html += '<div class="study-box-head">'+
+      '<span class="sbh-name">'+escapeHtml(sub)+(ended?' <span style="font-size:10px;opacity:.8;">(종료)</span>':'')+'</span>'+
+      '<span class="sbh-cnt">'+headCnt+'</span></div>';
+    html += '<div class="study-box-sub">보증금 '+won(dep)+''+(pendingCnt>0?' · <span style="color:var(--danger);font-weight:700;">입금 대기 '+pendingCnt+'명</span>':' · 전원 입금 완료')+'</div>';
+
+    items.forEach(function(it){
       var enr = it.enr;
       var paid = !!enr.paid, refunded = !!enr.refunded;
       var ek = encodeURIComponent(it.ekey);
-      var paidBtn = '<span class="pill '+(paid?'o':'x')+'" style="cursor:pointer" onclick="togglePaid(\''+ek+'\')">'+(paid?'완료':'대기')+'</span>';
-      var refBtn = '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer" onclick="toggleRefunded(\''+ek+'\')">'+(refunded?'완료':'대기')+'</span>';
-      var remainCell = refunded
-        ? '<span style="text-decoration:line-through;color:var(--muted)">'+won(remain)+'</span>'
-        : '<span style="font-weight:800;color:var(--point)">'+won(remain)+'</span>';
-      html += '<tr><td class="name"><span style="color:var(--muted);font-size:11px">'+nameLabel+'</span><br>'+escapeHtml(it.subject)+(deduct>0?' <span style="color:var(--danger);font-size:10px">(-'+won(deduct)+')</span>':'')+'</td>'+
-        '<td>'+remainCell+'</td>'+
-        '<td>'+paidBtn+'</td><td>'+refBtn+'</td></tr>';
+      var nameLabel = adminNameLabel(it.uid, it.name);
+      var deduct = dep - it.remain;
+
+      // 입금 버튼: 대기(빨강) ↔ 참가 확정(초록)
+      var paidBtn = paid
+        ? '<span class="pill o" style="cursor:pointer" onclick="togglePaid(\''+ek+'\')">✓ 참가 확정</span>'
+        : '<span class="pill x" style="cursor:pointer" onclick="togglePaid(\''+ek+'\')">입금 대기</span>';
+
+      var sub2;
+      if(!paid){
+        sub2 = '<span style="color:var(--danger);font-size:11px;">미입금 — 누르면 참가 확정</span>';
+      } else if(refunded){
+        sub2 = '<span style="color:var(--muted);font-size:11px;">환급 완료 · 환급액 <span style="text-decoration:line-through;">'+won(it.remain)+'</span></span>';
+      } else {
+        sub2 = '<span style="font-size:11px;color:var(--ink2);">환급 예정 <b style="color:var(--point);">'+won(it.remain)+'</b>'+(deduct>0?' <span style="color:var(--danger);">(-'+won(deduct)+')</span>':'')+'</span>';
+      }
+
+      // 참가 확정된 사람만 환급 토글 노출
+      var refBtn = paid
+        ? '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer;margin-left:4px;" onclick="toggleRefunded(\''+ek+'\')">'+(refunded?'환급완료':'환급대기')+'</span>'
+        : '';
+
+      html += '<div class="ti-row">'+
+        '<div class="ti-left"><div class="ti-name">'+nameLabel+'</div><div class="ti-sub">'+sub2+'</div></div>'+
+        '<div class="ti-right">'+paidBtn+refBtn+'</div>'+
+        '</div>';
     });
-    html += '<tr><td colspan="4" style="text-align:left;background:var(--bg);font-size:11px;color:var(--ink2);padding:6px 10px;">💳 '+(acc||'<span style="color:var(--muted)">환급 계좌 미등록</span>')+(g.uid?' <span style="cursor:pointer;color:var(--point);font-size:11px;margin-left:6px;" onclick="openMemoModal(\''+g.uid+'\')">구분메모 ✎</span>':'')+'</td></tr>';
+
+    if(!items.length){
+      html += '<div class="ti-row"><span style="font-size:12px;color:var(--muted);">신청자가 없습니다</span></div>';
+    }
+    html += '</div>';
   });
-  html += '</table></div>';
-  html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ 입금/환급의 "대기"를 누르면 "완료"로 바뀝니다.<br>※ 송금은 토스에서 직접 하고, 여기서 처리 상태만 기록하세요.<br>※ 종료된 스터디만 정산 금액에 반영됩니다.</div>';
+
+  if(!studyNames.length){
+    html += '<div class="empty">신청 내역이 없습니다</div>';
+  }
+  html += '<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">※ "입금 대기"를 누르면 "✓ 참가 확정"이 되고, 그때부터 강사 화면에 스터디가 보입니다.<br>※ 정원은 참가 확정(입금)된 인원만 차지합니다.<br>※ 환급은 종료된 스터디의 환급 예정액 기준입니다.</div>';
 
   // ===== 벌금 사용 내역 =====
   html += '<div class="section-title" style="margin-top:22px;">벌금 사용 내역</div>';
@@ -2141,14 +2286,23 @@ function enrollKey(name, subject){
 function togglePaid(encKey){
   var key = decodeURIComponent(encKey);
   if(!key || !DATA.enrollments[key]) return;
-  var cur = !!DATA.enrollments[key].paid;
+  var e = DATA.enrollments[key];
+  var cur = !!e.paid;
   var next = !cur;
+  // 참가 확정(입금 처리)하려는 경우, 정원이 이미 찼으면 막기
+  if(next){
+    var cap = subjectCapacity(e.subject);
+    if(cap !== null && subjectEnrolledCount(e.subject) >= cap){
+      toast('정원이 가득 찼습니다 ('+cap+'명). 먼저 다른 참가자를 빼주세요.');
+      return;
+    }
+  }
   var paidAt = next ? new Date().toISOString() : null;
   db.ref('study_enrollments/'+key).update({ paid:next, paidAt:paidAt }, function(err){
     if(err){ toast('변경 실패'); return; }
     DATA.enrollments[key].paid = next;
     DATA.enrollments[key].paidAt = paidAt;
-    toast(next ? '입금 확인 처리됨' : '입금 확인 취소됨');
+    toast(next ? (e.name+' 강사 참가 확정 ✓') : '참가 확정 취소됨');
     renderView(CUR_VIEW);
   });
 }
