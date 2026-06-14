@@ -212,7 +212,7 @@
       <div style="font-size:12px;color:var(--point);font-weight:700;">자동 적용 안내</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.7;">
         · 출석: 당일 오전 <b>9:50 ~ 10:30</b><br>
-        · 숙제: 회차일 <b>7일 전 오후 1:00</b> ~ 회차일 <b>새벽 1:00</b> 마감<br>
+        · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b><br>
         · 보증금: <b id="ses-deposit-summary">회차당 1만원 (5회차 = 총 5만원)</b>
       </div>
     </div>
@@ -331,7 +331,7 @@ var MY_NAME = localStorage.getItem('study_name');
 var MY_ROLE = localStorage.getItem('study_role') || 'teacher';
 if(!UID){ location.href = 'index.html'; }
 
-document.getElementById('user-name').textContent = (MY_ROLE === 'admin') ? MY_NAME : (MY_NAME + ' T');
+document.getElementById('user-name').textContent = MY_NAME;
 var roleBadge = document.getElementById('role-badge');
 if(MY_ROLE === 'admin'){ roleBadge.textContent = '어드민'; roleBadge.classList.add('admin'); }
 
@@ -401,6 +401,23 @@ function startLive(){
       if(CUR_VIEW) renderView(CUR_VIEW);
     });
   });
+
+  // 화면이 다시 보일 때(앱으로 복귀/탭 활성화) 최신 데이터로 강제 새로고침
+  // 모바일 PWA에서 백그라운드 동안 실시간 연결이 끊겼다가 돌아온 경우를 보강
+  function refreshNow(){
+    if(document.querySelector('.modal.on')) return; // 입력 중이면 건너뜀
+    loadAll(function(){ if(CUR_VIEW) renderView(CUR_VIEW); });
+  }
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) refreshNow();
+  });
+  window.addEventListener('focus', refreshNow);
+
+  // 화면을 켜둔 채로 보고 있을 때도 30초마다 한 번씩 최신 상태 확인(보강용)
+  setInterval(function(){
+    if(document.hidden) return;
+    refreshNow();
+  }, 30000);
 }
 
 // ===== 탭바 구성 =====
@@ -551,7 +568,7 @@ function calcDeposit(who, subject){
 
 // ===== 고정 시간 규칙 =====
 // 출석: 스터디 당일 09:50 ~ 10:30 (오프라인 출석)
-// 숙제: 마감 7일 전 13:00 ~ 회차일(마감일) 새벽 01:00
+// 숙제: 스터디 당일 13:00 ~ 7일 후 새벽 01:00 (다음 스터디 전날)
 var ATTEND_START = '09:50';
 var ATTEND_END   = '10:30';
 var HW_START     = '13:00';
@@ -564,13 +581,11 @@ function attendWindow(ses){
   var end   = new Date(ses.date + 'T' + ATTEND_END + ':00');
   return {start:start, end:end};
 }
-// 숙제 인증 시간대 반환 (마감 7일 전 13:00 ~ 회차일 01:00)
-// ses.date = 인증 마감일. 오픈은 그 7일 전 오후 1시.
+// 숙제 인증 시간대 반환 (당일 13:00 ~ 7일 후 01:00)
 function hwWindow(ses){
-  var start = new Date(ses.date + 'T00:00:00');
-  start.setDate(start.getDate() - HW_DAYS);
-  start.setHours(13, 0, 0, 0);
+  var start = new Date(ses.date + 'T' + HW_START + ':00');
   var end = new Date(ses.date + 'T00:00:00');
+  end.setDate(end.getDate() + HW_DAYS);
   end.setHours(HW_END_HOUR, 0, 0, 0);
   return {start:start, end:end};
 }
@@ -955,7 +970,7 @@ function renderTeacherHw(app){
     } else if(state==='open'){
       btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드 (여러 장 가능)</button>';
     } else if(state==='before'){
-      btn = '<button class="act-btn disabled" disabled>'+fmtDateTime(w.start)+' 부터</button>';
+      btn = '<button class="act-btn disabled" disabled>'+HW_START+' 부터 가능</button>';
     } else {
       btn = '<button class="act-btn disabled" disabled>'+(ses.ended?'스터디 종료':'숙제 마감')+'</button>';
     }
@@ -1004,7 +1019,7 @@ function showPeerNameButtons(sid, groups){
   var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
   groups.forEach(function(g, idx){
     html += '<button class="act-btn" style="width:100%;justify-content:space-between;display:flex;align-items:center;padding:14px 16px;" onclick="showPeerPhotos(\''+sid+'\','+idx+')">'
-      + '<span style="font-weight:700;">👤 '+escapeHtml(g.name)+' T</span>'
+      + '<span style="font-weight:700;">👤 '+escapeHtml(g.name)+'</span>'
       + '<span style="font-size:12px;color:var(--muted);">'+g.photos.length+'장 보기 ›</span>'
       + '</button>';
   });
@@ -1018,7 +1033,7 @@ function showPeerPhotos(sid, idx){
   var groups = _peerGroups[sid] || [];
   var g = groups[idx];
   if(!g){ return; }
-  document.getElementById('photo-title').textContent = g.name + ' T 숙제 ('+g.photos.length+'장)';
+  document.getElementById('photo-title').textContent = g.name + ' 숙제 ('+g.photos.length+'장)';
   var back = '<button class="act-btn" style="margin-bottom:14px;" onclick="showPeerNameButtons(\''+sid+'\',_peerGroups[\''+sid+'\'])">‹ 선생님 목록으로</button>';
   var imgs = g.photos.map(function(p, i){
     return '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+g.photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;"></div>';
@@ -1079,7 +1094,7 @@ function viewHwAdmin(sid, encodedKey){
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
   var who = rec.name || (DATA.users[rkey] && DATA.users[rkey].name) || rkey;
-  showPhotoModal(who + ' T 숙제 ('+photos.length+'장)', photos);
+  showPhotoModal(who + ' 숙제 ('+photos.length+'장)', photos);
 }
 
 // 사진을 앱 내 모달로 표시 (새 창 X)
@@ -1099,7 +1114,7 @@ function showPhotoModalGrouped(title, groups){
     var imgs = g.photos.map(function(p){
       return '<img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;margin-bottom:8px;">';
     }).join('');
-    return '<div style="margin-bottom:20px;"><div style="font-size:14px;font-weight:700;color:var(--main);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px;">'+escapeHtml(g.name)+' T ('+g.photos.length+'장)</div>'+imgs+'</div>';
+    return '<div style="margin-bottom:20px;"><div style="font-size:14px;font-weight:700;color:var(--main);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px;">'+escapeHtml(g.name)+' ('+g.photos.length+'장)</div>'+imgs+'</div>';
   }).join('');
   document.getElementById('photo-body').innerHTML = html;
   openModal('modal-photo');
@@ -1457,7 +1472,7 @@ function renderAdminHome(app){
           var hw = r.homework
             ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+pc+'장</span>'
             : '<span class="pill x">X</span>';
-          html += '<tr><td class="name">'+escapeHtml(name)+' T</td><td>'+att+'</td><td>'+hw+'</td></tr>';
+          html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td></tr>';
         });
         html += '</table></div>';
       } else {
@@ -2255,7 +2270,7 @@ function adminNameLabel(uid, name){
     var u = DATA.users[k];
     if(u && u.name === name) sameName.push(k);
   });
-  var label = escapeHtml(name) + ' T';
+  var label = escapeHtml(name);
   if(uid && sameName.length > 1){
     var u = DATA.users[uid] || {};
     var bits = [];
