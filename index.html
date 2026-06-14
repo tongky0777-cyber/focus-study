@@ -43,6 +43,7 @@
   }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 </head>
 <body>
@@ -109,6 +110,23 @@ var firebaseConfig = {
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
 
+// Firebase 익명 인증 (보안 규칙 auth != null 통과용) — 페이지 열릴 때 미리 로그인
+firebase.auth().signInAnonymously().catch(function(err){
+  console.error('익명 인증 실패:', err);
+});
+// 인증이 준비될 때까지 기다렸다가 콜백 실행 (로그인/가입 버튼용 안전장치)
+function ensureAuth(cb){
+  if(firebase.auth().currentUser){ cb(); return; }
+  var done = false;
+  var unsub = firebase.auth().onAuthStateChanged(function(user){
+    if(user && !done){ done = true; if(unsub) unsub(); cb(); }
+  });
+  // 인증이 아직이면 한 번 더 시도
+  firebase.auth().signInAnonymously().catch(function(){});
+  // 3초 안에 안 되면 그냥 진행 (네트워크 지연 대비)
+  setTimeout(function(){ if(!done){ done = true; cb(); } }, 3000);
+}
+
 // 데이터 경로: study_ 접두사로 기존 학원 데이터와 분리
 var USERS_REF = 'study_users';
 
@@ -161,6 +179,7 @@ function doSignup(){
 
   // 계정 키 = 이름 + 전화번호 뒷4자리 (동명이인도 각자 가입 가능)
   var key = nameKey(name) + '_' + phone;
+  ensureAuth(function(){
   db.ref(USERS_REF).once('value', function(snap){
     var all = snap.val() || {};
     // 같은 이름+전화번호 조합이 이미 있으면 중복
@@ -195,6 +214,7 @@ function doSignup(){
       setTimeout(function(){ location.href = 'dashboard.html'; }, 800);
     });
   });
+  });
 }
 
 function doLogin(){
@@ -208,6 +228,7 @@ function doLogin(){
   btn.disabled = true;
   showMsg('login-msg','로그인 중...','');
 
+  ensureAuth(function(){
   db.ref(USERS_REF).once('value', function(snap){
     btn.disabled = false;
     var all = snap.val() || {};
@@ -250,6 +271,7 @@ function doLogin(){
     localStorage.setItem('study_last_name', foundUser.name);
     localStorage.setItem('study_last_phone', phone);
     setTimeout(function(){ location.href = 'dashboard.html'; }, 600);
+  });
   });
 }
 
