@@ -331,7 +331,7 @@ var MY_NAME = localStorage.getItem('study_name');
 var MY_ROLE = localStorage.getItem('study_role') || 'teacher';
 if(!UID){ location.href = 'index.html'; }
 
-document.getElementById('user-name').textContent = MY_NAME;
+document.getElementById('user-name').textContent = (MY_ROLE === 'admin') ? MY_NAME : (MY_NAME + ' T');
 var roleBadge = document.getElementById('role-badge');
 if(MY_ROLE === 'admin'){ roleBadge.textContent = '어드민'; roleBadge.classList.add('admin'); }
 
@@ -1004,7 +1004,7 @@ function showPeerNameButtons(sid, groups){
   var html = '<div style="display:flex;flex-direction:column;gap:10px;">';
   groups.forEach(function(g, idx){
     html += '<button class="act-btn" style="width:100%;justify-content:space-between;display:flex;align-items:center;padding:14px 16px;" onclick="showPeerPhotos(\''+sid+'\','+idx+')">'
-      + '<span style="font-weight:700;">👤 '+escapeHtml(g.name)+'</span>'
+      + '<span style="font-weight:700;">👤 '+escapeHtml(g.name)+' T</span>'
       + '<span style="font-size:12px;color:var(--muted);">'+g.photos.length+'장 보기 ›</span>'
       + '</button>';
   });
@@ -1018,7 +1018,7 @@ function showPeerPhotos(sid, idx){
   var groups = _peerGroups[sid] || [];
   var g = groups[idx];
   if(!g){ return; }
-  document.getElementById('photo-title').textContent = g.name + ' 숙제 ('+g.photos.length+'장)';
+  document.getElementById('photo-title').textContent = g.name + ' T 숙제 ('+g.photos.length+'장)';
   var back = '<button class="act-btn" style="margin-bottom:14px;" onclick="showPeerNameButtons(\''+sid+'\',_peerGroups[\''+sid+'\'])">‹ 선생님 목록으로</button>';
   var imgs = g.photos.map(function(p, i){
     return '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+g.photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;"></div>';
@@ -1079,7 +1079,7 @@ function viewHwAdmin(sid, encodedKey){
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
   var who = rec.name || (DATA.users[rkey] && DATA.users[rkey].name) || rkey;
-  showPhotoModal(who + ' 숙제 ('+photos.length+'장)', photos);
+  showPhotoModal(who + ' T 숙제 ('+photos.length+'장)', photos);
 }
 
 // 사진을 앱 내 모달로 표시 (새 창 X)
@@ -1099,7 +1099,7 @@ function showPhotoModalGrouped(title, groups){
     var imgs = g.photos.map(function(p){
       return '<img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;margin-bottom:8px;">';
     }).join('');
-    return '<div style="margin-bottom:20px;"><div style="font-size:14px;font-weight:700;color:var(--main);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px;">'+escapeHtml(g.name)+' ('+g.photos.length+'장)</div>'+imgs+'</div>';
+    return '<div style="margin-bottom:20px;"><div style="font-size:14px;font-weight:700;color:var(--main);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px;">'+escapeHtml(g.name)+' T ('+g.photos.length+'장)</div>'+imgs+'</div>';
   }).join('');
   document.getElementById('photo-body').innerHTML = html;
   openModal('modal-photo');
@@ -1457,7 +1457,7 @@ function renderAdminHome(app){
           var hw = r.homework
             ? '<span class="pill o" style="cursor:pointer" onclick="viewHwAdmin(\''+ses.id+'\',\''+encodeURIComponent(name)+'\')">📷 '+pc+'장</span>'
             : '<span class="pill x">X</span>';
-          html += '<tr><td class="name">'+name+'</td><td>'+att+'</td><td>'+hw+'</td></tr>';
+          html += '<tr><td class="name">'+escapeHtml(name)+' T</td><td>'+att+'</td><td>'+hw+'</td></tr>';
         });
         html += '</table></div>';
       } else {
@@ -2255,7 +2255,7 @@ function adminNameLabel(uid, name){
     var u = DATA.users[k];
     if(u && u.name === name) sameName.push(k);
   });
-  var label = escapeHtml(name);
+  var label = escapeHtml(name) + ' T';
   if(uid && sameName.length > 1){
     var u = DATA.users[uid] || {};
     var bits = [];
