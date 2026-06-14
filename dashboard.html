@@ -212,7 +212,7 @@
       <div style="font-size:12px;color:var(--point);font-weight:700;">자동 적용 안내</div>
       <div style="font-size:12px;color:var(--ink2);margin-top:6px;line-height:1.7;">
         · 출석: 당일 오전 <b>9:50 ~ 10:30</b><br>
-        · 숙제: 당일 오후 <b>1:00</b> ~ 7일 후 <b>새벽 1:00</b><br>
+        · 숙제: 회차일 <b>7일 전 오후 1:00</b> ~ 회차일 <b>새벽 1:00</b> 마감<br>
         · 보증금: <b id="ses-deposit-summary">회차당 1만원 (5회차 = 총 5만원)</b>
       </div>
     </div>
@@ -551,7 +551,7 @@ function calcDeposit(who, subject){
 
 // ===== 고정 시간 규칙 =====
 // 출석: 스터디 당일 09:50 ~ 10:30 (오프라인 출석)
-// 숙제: 스터디 당일 13:00 ~ 7일 후 새벽 01:00 (다음 스터디 전날)
+// 숙제: 마감 7일 전 13:00 ~ 회차일(마감일) 새벽 01:00
 var ATTEND_START = '09:50';
 var ATTEND_END   = '10:30';
 var HW_START     = '13:00';
@@ -564,11 +564,13 @@ function attendWindow(ses){
   var end   = new Date(ses.date + 'T' + ATTEND_END + ':00');
   return {start:start, end:end};
 }
-// 숙제 인증 시간대 반환 (당일 13:00 ~ 7일 후 01:00)
+// 숙제 인증 시간대 반환 (마감 7일 전 13:00 ~ 회차일 01:00)
+// ses.date = 인증 마감일. 오픈은 그 7일 전 오후 1시.
 function hwWindow(ses){
-  var start = new Date(ses.date + 'T' + HW_START + ':00');
+  var start = new Date(ses.date + 'T00:00:00');
+  start.setDate(start.getDate() - HW_DAYS);
+  start.setHours(13, 0, 0, 0);
   var end = new Date(ses.date + 'T00:00:00');
-  end.setDate(end.getDate() + HW_DAYS);
   end.setHours(HW_END_HOUR, 0, 0, 0);
   return {start:start, end:end};
 }
@@ -953,7 +955,7 @@ function renderTeacherHw(app){
     } else if(state==='open'){
       btn = '<button class="act-btn active" onclick="uploadHw(\''+ses.id+'\')">📷 숙제 사진 업로드 (여러 장 가능)</button>';
     } else if(state==='before'){
-      btn = '<button class="act-btn disabled" disabled>'+HW_START+' 부터 가능</button>';
+      btn = '<button class="act-btn disabled" disabled>'+fmtDateTime(w.start)+' 부터</button>';
     } else {
       btn = '<button class="act-btn disabled" disabled>'+(ses.ended?'스터디 종료':'숙제 마감')+'</button>';
     }
