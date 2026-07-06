@@ -1928,6 +1928,14 @@ function toggleStatus(rowId){
   if(arrow) arrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
 }
 
+// 정산 화면에서 펼쳐진 스터디 기억 (subject 이름 기준)
+var _settleOpen = {};
+function toggleSettleStudy(sub){
+  var key = decodeURIComponent(sub);
+  _settleOpen[key] = !_settleOpen[key];
+  renderView(CUR_VIEW);
+}
+
 function renderAdminSettle(app){
   var hasEnroll = Object.keys(DATA.enrollments).some(function(k){
     return subjectSessionCount(DATA.enrollments[k].subject) > 0;
@@ -1984,6 +1992,7 @@ function renderAdminSettle(app){
     return a.localeCompare(b);
   });
 
+  var endedDividerShown = false;
   studyNames.forEach(function(sub){
     var items = byStudy[sub];
     // 대기(미입금) 먼저 보이게 정렬
@@ -1998,6 +2007,15 @@ function renderAdminSettle(app){
     var cap = subjectCapacity(sub);
     var dep = subjectDeposit(sub);
 
+    // 종료된 스터디 시작 지점에 구분선 1회 삽입
+    if(ended && !endedDividerShown){
+      html += '<div style="display:flex;align-items:center;gap:10px;margin:18px 0 10px;"><div style="flex:1;height:1px;background:var(--line);"></div><span style="font-size:12px;font-weight:700;color:var(--muted);">종료된 스터디</span><div style="flex:1;height:1px;background:var(--line);"></div></div>';
+      endedDividerShown = true;
+    }
+
+    // 펼침 여부: 진행중은 기본 펼침, 종료는 기본 접힘 (사용자가 누른 상태 우선)
+    var isOpen = (_settleOpen[sub] !== undefined) ? _settleOpen[sub] : !ended;
+
     html += '<div class="study-box">';
     var headCnt;
     if(cap !== null){
@@ -2006,11 +2024,13 @@ function renderAdminSettle(app){
     } else {
       headCnt = '입금 '+paidCnt+'명';
     }
-    html += '<div class="study-box-head">'+
+    var caret = isOpen ? '▲' : '▼';
+    html += '<div class="study-box-head" style="cursor:pointer;" onclick="toggleSettleStudy(\''+encodeURIComponent(sub)+'\')">'+
       '<span class="sbh-name">'+escapeHtml(sub)+(ended?' <span style="font-size:10px;opacity:.8;">(종료)</span>':'')+'</span>'+
-      '<span class="sbh-cnt">'+headCnt+'</span></div>';
+      '<span class="sbh-cnt">'+headCnt+' <span style="margin-left:6px;opacity:.7;">'+caret+'</span></span></div>';
     html += '<div class="study-box-sub">보증금 '+won(dep)+''+(pendingCnt>0?' · <span style="color:var(--danger);font-weight:700;">입금 대기 '+pendingCnt+'명</span>':' · 전원 입금 완료')+'</div>';
 
+    if(isOpen){
     items.forEach(function(it){
       var enr = it.enr;
       var paid = !!enr.paid, refunded = !!enr.refunded;
@@ -2046,6 +2066,7 @@ function renderAdminSettle(app){
     if(!items.length){
       html += '<div class="ti-row"><span style="font-size:12px;color:var(--muted);">신청자가 없습니다</span></div>';
     }
+    } // end if(isOpen)
     html += '</div>';
   });
 
