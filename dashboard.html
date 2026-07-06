@@ -8,19 +8,19 @@
 <title>포커스 스터디 · 대시보드</title>
 <style>
   :root{
-    --main:#0c4a6e; --point:#0891b2; --point2:#0e7490;
-    --bg:#f5fafe; --white:#fff; --ink:#0c4a6e; --ink2:#475569;
-    --muted:#94a3b8; --line:#dbeefb; --danger:#dc2626; --danger-bg:#fee2e2;
-    --ok:#0891b2; --ok-bg:#e0f2fe; --warn:#b45309; --warn-bg:#fef3c7;
+    --main:#1f8ac7; --point:#26c6ad; --point2:#0ba583;
+    --bg:#f2f9fd; --white:#fff; --ink:#2088c4; --ink2:#5e8199;
+    --muted:#9dbed2; --line:#dff1fb; --danger:#db6048; --danger-bg:#fde6e1;
+    --ok:#0ba583; --ok-bg:#d6f5ec; --warn:#c08a17; --warn-bg:#fff3da;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding-bottom:70px;}
-  .topbar{background:var(--main);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+  .topbar{background:linear-gradient(135deg,#41b0e4,#2e9bd6);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
   .topbar .brand{font-size:14px;font-weight:800;}
   .topbar .brand small{display:block;font-size:10px;font-weight:400;color:rgba(255,255,255,.55);margin-top:1px;}
   .topbar .user{display:flex;align-items:center;gap:8px;font-size:12px;}
   .topbar .role-badge{background:var(--point);font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;}
-  .topbar .role-badge.admin{background:#b45309;}
+  .topbar .role-badge.admin{background:#ffde59;color:#5a4200;}
   .logout{background:rgba(255,255,255,.12);color:#fff;border:none;font-size:11px;padding:5px 10px;border-radius:6px;cursor:pointer;}
   .wrap{max-width:760px;margin:0 auto;padding:16px;}
   .view{display:none;}
@@ -56,7 +56,7 @@
   .badge-time.before{background:var(--warn-bg);color:var(--warn);}
   .badge-time.closed{background:#f0f0f0;color:var(--muted);}
 
-  .btn{width:100%;padding:14px;font-size:15px;font-weight:800;color:#fff;background:var(--point);border:none;border-radius:11px;cursor:pointer;font-family:inherit;}
+  .btn{width:100%;padding:14px;font-size:15px;font-weight:800;color:#fff;background:linear-gradient(135deg,#2e9bd6,#1f8ac7);border:none;border-radius:11px;cursor:pointer;font-family:inherit;}
   .btn:active{background:var(--point2);}
   .btn.sec{background:var(--bg);color:var(--ink2);border:1px solid var(--line);}
 
@@ -732,7 +732,13 @@ function renderTeacherHome(app){
     else activeCount++;
   });
 
-  var html = '<div class="section-title">내 보증금 현황</div>';
+  var html = '<div style="background:linear-gradient(135deg,#4fbbea,#38c9c0);border-radius:16px;padding:16px 18px;margin-bottom:16px;position:relative;overflow:hidden;">'+
+    '<div style="position:absolute;right:-24px;top:-24px;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.16);"></div>'+
+    '<span style="background:rgba(255,255,255,.26);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;">강사</span>'+
+    '<div style="font-size:17px;font-weight:700;color:#fff;margin-top:9px;">'+escapeHtml(MY_NAME)+' 선생님, 안녕하세요 👋</div>'+
+    '<div style="font-size:11px;color:rgba(255,255,255,.92);margin-top:2px;">'+(enrolls.length?'이번 주 인증 잊지 마세요':'첫 스터디를 신청해 보세요')+'</div>'+
+    '</div>';
+  html += '<div class="section-title">내 보증금 현황</div>';
   html += '<div class="stat-grid">';
   html += '<div class="stat"><div class="label">신청 과목</div><div class="num">'+activeCount+'<span style="font-size:14px">개</span></div><div class="sub">진행중'+(endedCount>0?' · 종료 '+endedCount+'개':'')+'</div></div>';
   html += '<div class="stat"><div class="label">예상 환급액</div><div class="num point">'+(totalRemain/10000)+'<span style="font-size:14px">만원</span></div><div class="sub">총 보증금 '+(totalDeposit/10000)+'만원'+(totalRefunded>0?' · 환급완료 '+(totalRefunded/10000)+'만원':'')+'</div></div>';
