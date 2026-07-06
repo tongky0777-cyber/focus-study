@@ -205,6 +205,13 @@
       <div style="font-size:11px;color:var(--muted);margin-top:6px;">보증금 차감은 켜둔 항목만으로 판정됩니다. 둘 다 끄면 그 회차는 차감이 없어요.</div>
     </div>
     <div class="field">
+      <div class="toggle-row" id="ses-norefund-row" style="margin-bottom:0;border-color:#ffd98a;background:#fffaf0;">
+        <div><div class="tt" style="color:var(--warn);">💰 환급 없음 (전액 벌금 적립)</div><div class="ts">켜면 이 스터디 보증금은 환급되지 않고 전액 벌금 잔액으로 모입니다</div></div>
+        <button type="button" class="sw off" id="sw-norefund" onclick="toggleUseSwitch('norefund')"><b></b></button>
+      </div>
+      <div style="font-size:11px;color:var(--warn);margin-top:6px;line-height:1.6;">평소엔 꺼두세요. 회식 재원처럼 보증금을 돌려주지 않고 모으는 스터디에만 켜면 됩니다.</div>
+    </div>
+    <div class="field">
       <label>스터디 정보 (선택)</label>
       <textarea id="ses-desc" rows="4" placeholder="예) 범위, 준비물, 진행 방식, 숙제 분량 등 강사들에게 안내할 내용" style="width:100%;padding:12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);resize:vertical;"></textarea>
     </div>
@@ -541,10 +548,22 @@ function subjectUseHw(subject){
 // 세션 단위 사용 여부 (기본 사용)
 function sesUseAttend(ses){ return (ses && ses.useAttend !== undefined) ? !!ses.useAttend : true; }
 function sesUseHw(ses){ return (ses && ses.useHw !== undefined) ? !!ses.useHw : true; }
+function sesNoRefund(ses){ return !!(ses && ses.noRefund); }
+// 과목(스터디)이 환급 없음인지: 해당 과목 세션 중 하나라도 noRefund면 환급 없음
+function subjectNoRefund(subject){
+  var flag = false;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var s = DATA.sessions[sid];
+    if(s.subject === subject && s.noRefund) flag = true;
+  });
+  return flag;
+}
 
 // 특정 강사의 특정 과목 보증금 잔액 계산
 // who: uid 또는 이름(레거시) 모두 허용
 function calcDeposit(who, subject){
+  // 환급 없음 스터디는 인증 여부와 무관하게 환급액 0 (전액 벌금으로 적립됨)
+  if(subjectNoRefund(subject)) return 0;
   var deductions = 0;
   // 해당 과목의 모든 회차(세션)를 찾아서, 켜둔 항목을 하나도 안 했으면 차감
   Object.keys(DATA.sessions).forEach(function(sid){
@@ -1565,6 +1584,7 @@ function openSessionModal(){
   document.getElementById('ses-desc').value = '';
   setUseSwitch('attend', true);
   setUseSwitch('hw', true);
+  setUseSwitch('norefund', false);
   document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'block';
   document.getElementById('ses-price-field').style.display = 'block';
@@ -1575,16 +1595,19 @@ function openSessionModal(){
 }
 
 // 인증 항목 사용 토글 상태
-var _useAttend = true, _useHw = true;
+var _useAttend = true, _useHw = true, _noRefund = false;
 function setUseSwitch(which, on){
   if(which === 'attend'){ _useAttend = on; }
-  else { _useHw = on; }
-  var el = document.getElementById(which === 'attend' ? 'sw-attend' : 'sw-hw');
-  if(el) el.classList.toggle('on', on);
+  else if(which === 'hw'){ _useHw = on; }
+  else { _noRefund = on; }
+  var id = which === 'attend' ? 'sw-attend' : (which === 'hw' ? 'sw-hw' : 'sw-norefund');
+  var el = document.getElementById(id);
+  if(el){ el.classList.toggle('on', on); el.classList.toggle('off', !on); }
 }
 function toggleUseSwitch(which){
   if(which === 'attend'){ setUseSwitch('attend', !_useAttend); }
-  else { setUseSwitch('hw', !_useHw); }
+  else if(which === 'hw'){ setUseSwitch('hw', !_useHw); }
+  else { setUseSwitch('norefund', !_noRefund); }
 }
 
 // 개설 모달 보증금 안내 갱신
@@ -1659,7 +1682,7 @@ function saveSession(){
       var ses = {
         subject:subject, title:title, date:dateStr, desc:desc,
         groupId:groupId, round:(i+1), totalRounds:count, roundPrice:roundPrice, capacity:capacity,
-        useAttend:_useAttend, useHw:_useHw,
+        useAttend:_useAttend, useHw:_useHw, noRefund:_noRefund,
         createdAt:new Date().toISOString()
       };
       (function(key, sesObj){
@@ -1718,6 +1741,7 @@ function openEditGroup(gid){
   document.getElementById('ses-usefields').style.display = 'block';
   setUseSwitch('attend', sesUseAttend(first));
   setUseSwitch('hw', sesUseHw(first));
+  setUseSwitch('norefund', sesNoRefund(first));
   _editSessionId = null;
   openModal('modal-session');
 }
@@ -1741,9 +1765,9 @@ function saveEditGroup(){
   if(!keys.length){ toast('스터디를 찾을 수 없습니다'); return; }
   var done = 0, fail = false;
   keys.forEach(function(sid){
-    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw }, function(err){
+    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw, noRefund:_noRefund }, function(err){
       if(err) fail = true;
-      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw });
+      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw, noRefund:_noRefund });
       done++;
       if(done === keys.length){
         // 날짜·보증금·정원 칸 다시 기본 상태로 복구
