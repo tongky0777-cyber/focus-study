@@ -234,14 +234,17 @@
       <input id="enr-account" type="text" placeholder="예) 카카오뱅크 3333-01-1234567 홍길동">
       <div style="font-size:11px;color:var(--muted);margin-top:5px;">스터디 종료 후 이 계좌로 보증금이 환급됩니다</div>
     </div>
-    <div class="card" style="background:var(--warn-bg);border-color:var(--warn);">
-      <div style="font-size:13px;color:var(--warn);font-weight:700;">보증금 입금 계좌</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:5px;">
-        <div style="font-size:14px;font-weight:800;color:var(--main);">토스뱅크 1000-6131-1749</div>
-        <button type="button" id="copy-acct-btn" onclick="copyDepositAccount()" style="flex-shrink:0;font-size:12px;font-weight:800;color:var(--point);background:var(--ok-bg);border:1px solid var(--point);border-radius:8px;padding:7px 12px;cursor:pointer;font-family:inherit;">📋 복사</button>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px;">보증금 입금 계좌</div>
+    <div class="card" style="background:#e0f2fe;border-color:#7dd3fc;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div>
+          <div style="font-size:11px;color:var(--ink2);">토스뱅크</div>
+          <div style="font-size:19px;font-weight:800;color:var(--main);letter-spacing:.5px;">1000-6131-1749</div>
+          <div style="font-size:11px;color:var(--ink2);margin-top:2px;">예금주 김병진</div>
+        </div>
+        <button type="button" id="copy-acct-btn" onclick="copyDepositAccount()" style="flex-shrink:0;font-size:12px;font-weight:800;color:#fff;background:var(--main);border:none;border-radius:9px;padding:10px 14px;cursor:pointer;font-family:inherit;">📋 복사</button>
       </div>
-      <div style="font-size:12px;color:var(--ink2);">예금주: 김병진</div>
-      <div id="enr-deposit-info" style="font-size:13px;color:var(--warn);font-weight:700;margin-top:6px;"></div>
+      <div id="enr-deposit-info" style="font-size:13px;color:var(--warn);font-weight:700;margin-top:8px;"></div>
     </div>
     <div class="card" style="background:var(--ok-bg);border-color:var(--point);">
       <div style="font-size:13px;color:var(--point);font-weight:700;">보증금 안내</div>
