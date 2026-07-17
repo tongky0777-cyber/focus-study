@@ -425,6 +425,7 @@ function buildTabs(){
   var tabs = (MY_ROLE === 'admin') ? [
     {id:'a-home', ico:'📋', lbl:'스터디'},
     {id:'a-status', ico:'📊', lbl:'현황'},
+    {id:'t-hw', ico:'📚', lbl:'숙제'},
     {id:'a-settle', ico:'💰', lbl:'정산'}
   ] : [
     {id:'t-home', ico:'🏠', lbl:'현황'},
@@ -931,14 +932,16 @@ function checkAttend(sid){
 }
 
 function renderTeacherHw(app){
+  var isAdmin = (MY_ROLE === 'admin');
   var enrolls = myPaidEnrollments();
   var mySubjects = enrolls.map(function(e){ return e.subject; });
   // 마감 안 지난 + 오늘 이후 세션 위주로 숙제 업로드 가능
   var sessions = [];
   Object.keys(DATA.sessions).forEach(function(sid){
     var ses = DATA.sessions[sid];
-    if(mySubjects.indexOf(ses.subject) < 0) return;
     if(!sesUseHw(ses)) return; // 숙제 미사용 스터디 제외
+    // 관리자는 신청 여부와 무관하게 전체, 강사는 본인이 참가 확정한 과목만
+    if(!isAdmin && mySubjects.indexOf(ses.subject) < 0) return;
     sessions.push(Object.assign({id:sid}, ses));
   });
   // 진행중(인증가능/예정) 먼저, 마감/종료된 건 아래로.
@@ -951,13 +954,13 @@ function renderTeacherHw(app){
     return b.date.localeCompare(a.date);               // 마감됨: 최신이 위
   });
 
-  var html = '<div class="section-title">숙제 인증</div>';
-  if(!mySubjects.length){
+  var html = '<div class="section-title">숙제 인증'+(isAdmin?' <span style="font-size:11px;font-weight:400;color:var(--muted);">(관리자 · 모든 스터디)</span>':'')+'</div>';
+  if(!isAdmin && !mySubjects.length){
     html += '<div class="empty">신청한 과목이 없습니다</div>';
     app.innerHTML = html; return;
   }
   if(!sessions.length){
-    html += '<div class="empty">신청한 과목의 스터디가 없습니다</div>';
+    html += '<div class="empty">'+(isAdmin?'숙제 인증을 사용하는 스터디가 없습니다':'신청한 과목의 스터디가 없습니다')+'</div>';
     app.innerHTML = html; return;
   }
   sessions.forEach(function(ses){
