@@ -1093,7 +1093,86 @@ function viewHw(sid){
   var rec = (DATA.records[sid] && DATA.records[sid][myRecKey(sid)]) || {};
   var photos = rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : []);
   if(!photos.length){ toast('사진이 없습니다'); return; }
-  showPhotoModal('내 숙제 ('+photos.length+'장)', photos);
+  showPhotoModalEditable('내 숙제 ('+photos.length+'장)', photos, sid);
+}
+
+// 본인 숙제: 사진마다 삭제 버튼 + 전체 취소 버튼이 있는 모달
+function showPhotoModalEditable(title, photos, sid){
+  document.getElementById('photo-title').textContent = title;
+  var imgs = photos.map(function(p, i){
+    return '<div style="margin-bottom:14px;position:relative;">'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+photos.length+'</div>'+
+      '<img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;">'+
+      '<button onclick="deleteHwPhoto(\''+sid+'\','+i+')" style="position:absolute;top:24px;right:8px;background:rgba(220,38,38,.92);color:#fff;font-size:11px;font-weight:800;padding:6px 11px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;">🗑 삭제</button>'+
+      '</div>';
+  }).join('');
+  imgs += '<button onclick="cancelHwAll(\''+sid+'\')" style="width:100%;margin-top:4px;padding:12px;text-align:center;font-size:13px;font-weight:800;color:var(--danger);background:var(--white);border:1px solid #fca5a5;border-radius:10px;cursor:pointer;font-family:inherit;">이 회차 숙제 인증 전체 취소</button>';
+  document.getElementById('photo-body').innerHTML = imgs;
+  openModal('modal-photo');
+}
+
+// 숙제 사진 한 장 삭제 (본인 기록만)
+function deleteHwPhoto(sid, idx){
+  var ses = DATA.sessions[sid];
+  if(ses && isSessionClosed(ses)){ toast('마감된 회차는 수정할 수 없습니다'); return; }
+  var rkey = myRecKey(sid);
+  var rec = (DATA.records[sid] && DATA.records[sid][rkey]) || {};
+  var photos = (rec.homeworkPhotos || (rec.homeworkPhoto ? [rec.homeworkPhoto] : [])).slice();
+  if(idx < 0 || idx >= photos.length) return;
+  if(!confirm((idx+1)+'번째 사진을 삭제할까요?')) return;
+  photos.splice(idx, 1);
+
+  if(photos.length === 0){
+    // 마지막 장이면 인증 자체를 해제
+    db.ref('study_records/'+sid+'/'+rkey).update({
+      homework:false, homeworkPhotos:null, homeworkPhoto:null, homeworkAt:null
+    }, function(err){
+      if(err){ toast('삭제 실패'); return; }
+      if(DATA.records[sid] && DATA.records[sid][rkey]){
+        DATA.records[sid][rkey].homework = false;
+        DATA.records[sid][rkey].homeworkPhotos = null;
+        DATA.records[sid][rkey].homeworkPhoto = null;
+      }
+      closeModal('modal-photo');
+      toast('사진이 모두 삭제되어 인증이 해제되었습니다');
+      renderView(CUR_VIEW);
+    });
+  } else {
+    db.ref('study_records/'+sid+'/'+rkey).update({
+      homeworkPhotos:photos, homeworkPhoto:photos[0]
+    }, function(err){
+      if(err){ toast('삭제 실패'); return; }
+      if(DATA.records[sid] && DATA.records[sid][rkey]){
+        DATA.records[sid][rkey].homeworkPhotos = photos;
+        DATA.records[sid][rkey].homeworkPhoto = photos[0];
+      }
+      toast('사진을 삭제했습니다');
+      // 모달 다시 그리기
+      showPhotoModalEditable('내 숙제 ('+photos.length+'장)', photos, sid);
+      renderView(CUR_VIEW);
+    });
+  }
+}
+
+// 숙제 인증 전체 취소 (본인 기록만)
+function cancelHwAll(sid){
+  var ses = DATA.sessions[sid];
+  if(ses && isSessionClosed(ses)){ toast('마감된 회차는 수정할 수 없습니다'); return; }
+  var rkey = myRecKey(sid);
+  if(!confirm('이 회차의 숙제 인증을 전체 취소할까요?\n올린 사진이 모두 삭제되고 인증이 해제됩니다.')) return;
+  db.ref('study_records/'+sid+'/'+rkey).update({
+    homework:false, homeworkPhotos:null, homeworkPhoto:null, homeworkAt:null
+  }, function(err){
+    if(err){ toast('취소 실패'); return; }
+    if(DATA.records[sid] && DATA.records[sid][rkey]){
+      DATA.records[sid][rkey].homework = false;
+      DATA.records[sid][rkey].homeworkPhotos = null;
+      DATA.records[sid][rkey].homeworkPhoto = null;
+    }
+    closeModal('modal-photo');
+    toast('숙제 인증을 취소했습니다');
+    renderView(CUR_VIEW);
+  });
 }
 
 // 어드민: 특정 강사의 숙제 사진 보기
