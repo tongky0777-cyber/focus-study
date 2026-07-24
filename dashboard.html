@@ -204,6 +204,14 @@
       </div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px;">보증금 차감은 켜둔 항목만으로 판정됩니다. 둘 다 끄면 그 회차는 차감이 없어요.</div>
     </div>
+    <div class="field" id="ses-norefund-field">
+      <label>환급 방식</label>
+      <div class="toggle-row" style="margin-bottom:0;">
+        <div><div class="tt">환급 없음 (전액 벌금)</div><div class="ts">참가비 성격. 스터디가 종료되면 보증금이 환급되지 않고 전부 벌금으로 모입니다</div></div>
+        <button type="button" class="sw" id="sw-norefund" onclick="toggleNoRefund()"><b></b></button>
+      </div>
+      <div id="ses-norefund-warn" style="display:none;background:var(--danger-bg);border:1px solid #fca5a5;border-radius:10px;padding:10px 12px;font-size:11px;color:var(--danger);line-height:1.6;margin-top:8px;">⚠️ 이 스터디는 출석·숙제와 무관하게 종료 후 환급액이 0이 되고, 낸 보증금 전액이 벌금 잔액으로 들어갑니다.</div>
+    </div>
     <div class="field">
       <label>스터디 정보 (선택)</label>
       <textarea id="ses-desc" rows="4" placeholder="예) 범위, 준비물, 진행 방식, 숙제 분량 등 강사들에게 안내할 내용" style="width:100%;padding:12px;font-size:15px;border:1px solid var(--line);border-radius:10px;font-family:inherit;background:var(--bg);resize:vertical;"></textarea>
@@ -275,6 +283,18 @@
     <h3 id="photo-title">숙제 사진</h3>
     <div id="photo-body"></div>
   </div>
+</div>
+
+<!-- 모달: 사진 확대 뷰어 (전체화면) -->
+<div id="zoom-viewer" style="display:none;position:fixed;inset:0;z-index:200;background:#0f172a;touch-action:none;overflow:hidden;">
+  <div id="zoom-stage" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+    <img id="zoom-img" src="" style="max-width:100%;max-height:100%;transform-origin:center center;will-change:transform;user-select:none;-webkit-user-drag:none;">
+  </div>
+  <div id="zoom-count" style="position:absolute;top:14px;left:16px;color:#fff;font-size:13px;font-weight:700;opacity:.9;"></div>
+  <button onclick="closeZoom()" style="position:absolute;top:8px;right:12px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;line-height:1;padding:6px 10px;">×</button>
+  <button id="zoom-prev" onclick="zoomNav(-1)" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:26px;cursor:pointer;border-radius:50%;width:44px;height:44px;">‹</button>
+  <button id="zoom-next" onclick="zoomNav(1)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);border:none;color:#fff;font-size:26px;cursor:pointer;border-radius:50%;width:44px;height:44px;">›</button>
+  <div style="position:absolute;bottom:12px;left:0;right:0;text-align:center;color:rgba(255,255,255,.75);font-size:11px;pointer-events:none;">두 손가락으로 확대 · 더블탭 확대 · 드래그로 이동</div>
 </div>
 
 <!-- 모달: 인증번호(뒷 4자리) 변경 -->
@@ -543,6 +563,9 @@ function sesUseHw(ses){ return (ses && ses.useHw !== undefined) ? !!ses.useHw : 
 // 특정 강사의 특정 과목 보증금 잔액 계산
 // who: uid 또는 이름(레거시) 모두 허용
 function calcDeposit(who, subject){
+  // '환급 없음' 스터디가 종료된 경우: 보증금 전액이 벌금으로 → 환급액 0
+  if(subjectNoRefund(subject) && isSubjectEnded(subject)) return 0;
+
   var deductions = 0;
   // 해당 과목의 모든 회차(세션)를 찾아서, 켜둔 항목을 하나도 안 했으면 차감
   Object.keys(DATA.sessions).forEach(function(sid){
@@ -566,6 +589,18 @@ function calcDeposit(who, subject){
   });
   return Math.max(0, subjectDeposit(subject) - deductions);
 }
+
+// 특정 과목의 '환급 없음' 설정 여부 (세션에 저장된 noRefund, 기본 false)
+function subjectNoRefund(subject){
+  var v = null;
+  Object.keys(DATA.sessions).forEach(function(sid){
+    var ses = DATA.sessions[sid];
+    if(ses.subject !== subject) return;
+    if(v === null && ses.noRefund !== undefined) v = !!ses.noRefund;
+  });
+  return (v === null) ? false : v;
+}
+function sesNoRefund(ses){ return (ses && ses.noRefund !== undefined) ? !!ses.noRefund : false; }
 
 // ===== 고정 시간 규칙 =====
 // 출석: 스터디 당일 09:50 ~ 10:30 (오프라인 출석)
@@ -1037,6 +1072,141 @@ function showPeerNameButtons(sid, groups){
   openModal('modal-photo');
 }
 
+// ===== 사진 확대 뷰어 =====
+var _zoomPhotos = [], _zoomIdx = 0;
+var _zScale = 1, _zX = 0, _zY = 0;
+
+function openZoom(photos, idx){
+  _zoomPhotos = photos || [];
+  _zoomIdx = idx || 0;
+  if(!_zoomPhotos.length) return;
+  document.getElementById('zoom-viewer').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  showZoomImage();
+  bindZoomEvents();
+}
+function closeZoom(){
+  document.getElementById('zoom-viewer').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function showZoomImage(){
+  var img = document.getElementById('zoom-img');
+  img.src = _zoomPhotos[_zoomIdx];
+  resetZoom();
+  document.getElementById('zoom-count').textContent = (_zoomIdx+1)+' / '+_zoomPhotos.length;
+  var multi = _zoomPhotos.length > 1;
+  document.getElementById('zoom-prev').style.display = multi ? 'block' : 'none';
+  document.getElementById('zoom-next').style.display = multi ? 'block' : 'none';
+}
+function zoomNav(dir){
+  if(_zoomPhotos.length < 2) return;
+  _zoomIdx = (_zoomIdx + dir + _zoomPhotos.length) % _zoomPhotos.length;
+  showZoomImage();
+}
+function resetZoom(){
+  _zScale = 1; _zX = 0; _zY = 0;
+  applyZoom();
+}
+function applyZoom(){
+  var img = document.getElementById('zoom-img');
+  if(img) img.style.transform = 'translate('+_zX+'px,'+_zY+'px) scale('+_zScale+')';
+}
+
+var _zoomBound = false;
+function bindZoomEvents(){
+  if(_zoomBound) return;
+  _zoomBound = true;
+  var stage = document.getElementById('zoom-stage');
+  var startDist = 0, startScale = 1;
+  var dragging = false, lastX = 0, lastY = 0;
+  var lastTap = 0;
+
+  // 터치: 핀치 줌 + 드래그 + 더블탭
+  stage.addEventListener('touchstart', function(e){
+    if(e.touches.length === 2){
+      startDist = touchDist(e.touches);
+      startScale = _zScale;
+    } else if(e.touches.length === 1){
+      dragging = true;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      // 더블탭 감지
+      var now = Date.now();
+      if(now - lastTap < 300){
+        if(_zScale > 1){ resetZoom(); }
+        else { _zScale = 2.5; applyZoom(); }
+        lastTap = 0;
+      } else { lastTap = now; }
+    }
+  }, {passive:true});
+
+  stage.addEventListener('touchmove', function(e){
+    if(e.touches.length === 2){
+      e.preventDefault();
+      var d = touchDist(e.touches);
+      if(startDist > 0){
+        _zScale = Math.min(6, Math.max(1, startScale * (d/startDist)));
+        if(_zScale === 1){ _zX = 0; _zY = 0; }
+        applyZoom();
+      }
+    } else if(e.touches.length === 1 && dragging && _zScale > 1){
+      e.preventDefault();
+      var dx = e.touches[0].clientX - lastX;
+      var dy = e.touches[0].clientY - lastY;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      _zX += dx; _zY += dy;
+      applyZoom();
+    }
+  }, {passive:false});
+
+  stage.addEventListener('touchend', function(){ dragging = false; startDist = 0; }, {passive:true});
+
+  // 마우스 휠 확대 (노트북)
+  stage.addEventListener('wheel', function(e){
+    e.preventDefault();
+    var delta = e.deltaY > 0 ? -0.2 : 0.2;
+    _zScale = Math.min(6, Math.max(1, _zScale + delta));
+    if(_zScale === 1){ _zX = 0; _zY = 0; }
+    applyZoom();
+  }, {passive:false});
+
+  // 마우스 드래그 (노트북)
+  stage.addEventListener('mousedown', function(e){
+    if(_zScale <= 1) return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function(e){
+    if(!dragging) return;
+    _zX += e.clientX - lastX; _zY += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    applyZoom();
+  });
+  window.addEventListener('mouseup', function(){ dragging = false; });
+
+  // 더블클릭 확대 (노트북)
+  stage.addEventListener('dblclick', function(){
+    if(_zScale > 1){ resetZoom(); } else { _zScale = 2.5; applyZoom(); }
+  });
+
+  // 배경 클릭하면 닫기 (이미지 자체는 제외)
+  stage.addEventListener('click', function(e){
+    if(e.target.id === 'zoom-stage' && _zScale === 1) closeZoom();
+  });
+
+  // ESC로 닫기, 좌우 화살표로 이동
+  document.addEventListener('keydown', function(e){
+    if(document.getElementById('zoom-viewer').style.display !== 'block') return;
+    if(e.key === 'Escape') closeZoom();
+    if(e.key === 'ArrowLeft') zoomNav(-1);
+    if(e.key === 'ArrowRight') zoomNav(1);
+  });
+}
+function touchDist(t){
+  var dx = t[0].clientX - t[1].clientX;
+  var dy = t[0].clientY - t[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
 // 특정 선생님 사진만 표시 (뒤로가기 버튼 포함)
 function showPeerPhotos(sid, idx){
   var groups = _peerGroups[sid] || [];
@@ -1044,8 +1214,13 @@ function showPeerPhotos(sid, idx){
   if(!g){ return; }
   document.getElementById('photo-title').textContent = g.name + ' 숙제 ('+g.photos.length+'장)';
   var back = '<button class="act-btn" style="margin-bottom:14px;" onclick="showPeerNameButtons(\''+sid+'\',_peerGroups[\''+sid+'\'])">‹ 선생님 목록으로</button>';
+  window._zoomList = g.photos;
   var imgs = g.photos.map(function(p, i){
-    return '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+g.photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;"></div>';
+    return '<div style="margin-bottom:12px;position:relative;">'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+g.photos.length+'</div>'+
+      '<img src="'+p+'" onclick="openZoom(window._zoomList,'+i+')" style="max-width:100%;border-radius:8px;display:block;cursor:zoom-in;">'+
+      '<span style="position:absolute;right:8px;bottom:8px;background:rgba(12,74,110,.85);color:#fff;font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;pointer-events:none;">🔍 탭하면 확대</span>'+
+      '</div>';
   }).join('');
   document.getElementById('photo-body').innerHTML = back + imgs;
 }
@@ -1099,11 +1274,13 @@ function viewHw(sid){
 // 본인 숙제: 사진마다 삭제 버튼 + 전체 취소 버튼이 있는 모달
 function showPhotoModalEditable(title, photos, sid){
   document.getElementById('photo-title').textContent = title;
+  window._zoomList = photos;
   var imgs = photos.map(function(p, i){
     return '<div style="margin-bottom:14px;position:relative;">'+
       '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+photos.length+'</div>'+
-      '<img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;">'+
+      '<img src="'+p+'" onclick="openZoom(window._zoomList,'+i+')" style="max-width:100%;border-radius:8px;display:block;cursor:zoom-in;">'+
       '<button onclick="deleteHwPhoto(\''+sid+'\','+i+')" style="position:absolute;top:24px;right:8px;background:rgba(220,38,38,.92);color:#fff;font-size:11px;font-weight:800;padding:6px 11px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;">🗑 삭제</button>'+
+      '<span style="position:absolute;right:8px;bottom:8px;background:rgba(12,74,110,.85);color:#fff;font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;pointer-events:none;">🔍 탭하면 확대</span>'+
       '</div>';
   }).join('');
   imgs += '<button onclick="cancelHwAll(\''+sid+'\')" style="width:100%;margin-top:4px;padding:12px;text-align:center;font-size:13px;font-weight:800;color:var(--danger);background:var(--white);border:1px solid #fca5a5;border-radius:10px;cursor:pointer;font-family:inherit;">이 회차 숙제 인증 전체 취소</button>';
@@ -1188,8 +1365,13 @@ function viewHwAdmin(sid, encodedKey){
 // 사진을 앱 내 모달로 표시 (새 창 X)
 function showPhotoModal(title, photos){
   document.getElementById('photo-title').textContent = title;
+  window._zoomList = photos;
   var imgs = photos.map(function(p, i){
-    return '<div style="margin-bottom:12px;"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+photos.length+'</div><img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;"></div>';
+    return '<div style="margin-bottom:12px;position:relative;">'+
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">'+(i+1)+' / '+photos.length+'</div>'+
+      '<img src="'+p+'" onclick="openZoom(window._zoomList,'+i+')" style="max-width:100%;border-radius:8px;display:block;cursor:zoom-in;">'+
+      '<span style="position:absolute;right:8px;bottom:8px;background:rgba(12,74,110,.85);color:#fff;font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;pointer-events:none;">🔍 탭하면 확대</span>'+
+      '</div>';
   }).join('');
   document.getElementById('photo-body').innerHTML = imgs;
   openModal('modal-photo');
@@ -1198,9 +1380,18 @@ function showPhotoModal(title, photos){
 // 사진 여러 강사 묶음 모달 (이름별 구분)
 function showPhotoModalGrouped(title, groups){
   document.getElementById('photo-title').textContent = title;
+  // 전체 사진을 하나의 목록으로 만들어 확대 시 넘길 수 있게
+  var flat = [];
+  groups.forEach(function(g){ g.photos.forEach(function(p){ flat.push(p); }); });
+  window._zoomList = flat;
+  var offset = 0;
   var html = groups.map(function(g){
     var imgs = g.photos.map(function(p){
-      return '<img src="'+p+'" style="max-width:100%;border-radius:8px;display:block;margin-bottom:8px;">';
+      var gi = offset++;
+      return '<div style="position:relative;margin-bottom:8px;">'+
+        '<img src="'+p+'" onclick="openZoom(window._zoomList,'+gi+')" style="max-width:100%;border-radius:8px;display:block;cursor:zoom-in;">'+
+        '<span style="position:absolute;right:8px;bottom:8px;background:rgba(12,74,110,.85);color:#fff;font-size:10px;font-weight:700;padding:4px 9px;border-radius:20px;pointer-events:none;">🔍 확대</span>'+
+        '</div>';
     }).join('');
     return '<div style="margin-bottom:20px;"><div style="font-size:14px;font-weight:700;color:var(--main);border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:8px;">'+escapeHtml(g.name)+' ('+g.photos.length+'장)</div>'+imgs+'</div>';
   }).join('');
@@ -1644,11 +1835,13 @@ function openSessionModal(){
   document.getElementById('ses-desc').value = '';
   setUseSwitch('attend', true);
   setUseSwitch('hw', true);
+  setNoRefundSwitch(false);
   document.getElementById('ses-date').parentElement.style.display = 'block';
   document.getElementById('ses-count').parentElement.style.display = 'block';
   document.getElementById('ses-price-field').style.display = 'block';
   document.getElementById('ses-capacity-field').style.display = 'block';
   document.getElementById('ses-usefields').style.display = 'block';
+  document.getElementById('ses-norefund-field').style.display = 'block';
   updateDepositSummary();
   openModal('modal-session');
 }
@@ -1665,6 +1858,17 @@ function toggleUseSwitch(which){
   if(which === 'attend'){ setUseSwitch('attend', !_useAttend); }
   else { setUseSwitch('hw', !_useHw); }
 }
+
+// 환급 없음(전액 벌금) 토글 상태
+var _noRefund = false;
+function setNoRefundSwitch(on){
+  _noRefund = on;
+  var el = document.getElementById('sw-norefund');
+  if(el) el.classList.toggle('on', on);
+  var warn = document.getElementById('ses-norefund-warn');
+  if(warn) warn.style.display = on ? 'block' : 'none';
+}
+function toggleNoRefund(){ setNoRefundSwitch(!_noRefund); }
 
 // 개설 모달 보증금 안내 갱신
 function updateDepositSummary(){
@@ -1693,6 +1897,7 @@ function openEditSession(sid){
   document.getElementById('ses-price-field').style.display = 'none';
   document.getElementById('ses-capacity-field').style.display = 'none';
   document.getElementById('ses-usefields').style.display = 'none';
+  document.getElementById('ses-norefund-field').style.display = 'none';
   openModal('modal-session');
 }
 
@@ -1738,7 +1943,7 @@ function saveSession(){
       var ses = {
         subject:subject, title:title, date:dateStr, desc:desc,
         groupId:groupId, round:(i+1), totalRounds:count, roundPrice:roundPrice, capacity:capacity,
-        useAttend:_useAttend, useHw:_useHw,
+        useAttend:_useAttend, useHw:_useHw, noRefund:_noRefund,
         createdAt:new Date().toISOString()
       };
       (function(key, sesObj){
@@ -1797,6 +2002,8 @@ function openEditGroup(gid){
   document.getElementById('ses-usefields').style.display = 'block';
   setUseSwitch('attend', sesUseAttend(first));
   setUseSwitch('hw', sesUseHw(first));
+  document.getElementById('ses-norefund-field').style.display = 'block';
+  setNoRefundSwitch(sesNoRefund(first));
   _editSessionId = null;
   openModal('modal-session');
 }
@@ -1820,9 +2027,9 @@ function saveEditGroup(){
   if(!keys.length){ toast('스터디를 찾을 수 없습니다'); return; }
   var done = 0, fail = false;
   keys.forEach(function(sid){
-    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw }, function(err){
+    db.ref('study_sessions/'+sid).update({ subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw, noRefund:_noRefund }, function(err){
       if(err) fail = true;
-      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw });
+      else DATA.sessions[sid] = Object.assign(DATA.sessions[sid], { subject:subject, title:title, desc:desc, roundPrice:roundPrice, capacity:capacity, useAttend:_useAttend, useHw:_useHw, noRefund:_noRefund });
       done++;
       if(done === keys.length){
         // 날짜·보증금·정원 칸 다시 기본 상태로 복구
@@ -2064,7 +2271,14 @@ function renderAdminSettle(app){
     html += '<div class="study-box-head">'+
       '<span class="sbh-name">'+escapeHtml(sub)+(ended?' <span style="font-size:10px;opacity:.8;">(종료)</span>':'')+'</span>'+
       '<span class="sbh-cnt">'+headCnt+'</span></div>';
-    html += '<div class="study-box-sub">보증금 '+won(dep)+''+(pendingCnt>0?' · <span style="color:var(--danger);font-weight:700;">입금 대기 '+pendingCnt+'명</span>':' · 전원 입금 완료')+'</div>';
+    var noRefund = subjectNoRefund(sub);
+    var subLine = '보증금 '+won(dep);
+    if(noRefund){
+      subLine += ' · <span style="color:var(--warn);font-weight:800;">환급 없음' + (ended ? ' → 전액 벌금' : ' (종료 시 전액 벌금)') + '</span>';
+    } else {
+      subLine += (pendingCnt>0?' · <span style="color:var(--danger);font-weight:700;">입금 대기 '+pendingCnt+'명</span>':' · 전원 입금 완료');
+    }
+    html += '<div class="study-box-sub">'+subLine+'</div>';
 
     items.forEach(function(it){
       var enr = it.enr;
@@ -2081,14 +2295,18 @@ function renderAdminSettle(app){
       var sub2;
       if(!paid){
         sub2 = '<span style="color:var(--danger);font-size:11px;">미입금 — 누르면 참가 확정</span>';
+      } else if(noRefund && ended){
+        sub2 = '<span style="color:var(--warn);font-size:11px;font-weight:700;">환급 0원 · 벌금 '+won(dep)+' 귀속</span>';
+      } else if(noRefund){
+        sub2 = '<span style="color:var(--ink2);font-size:11px;">종료되면 전액('+won(dep)+') 벌금 귀속</span>';
       } else if(refunded){
         sub2 = '<span style="color:var(--muted);font-size:11px;">환급 완료 · 환급액 <span style="text-decoration:line-through;">'+won(it.remain)+'</span></span>';
       } else {
         sub2 = '<span style="font-size:11px;color:var(--ink2);">환급 예정 <b style="color:var(--point);">'+won(it.remain)+'</b>'+(deduct>0?' <span style="color:var(--danger);">(-'+won(deduct)+')</span>':'')+'</span>';
       }
 
-      // 참가 확정된 사람만 환급 토글 노출
-      var refBtn = paid
+      // 환급 없음 스터디는 환급 토글 숨김(전액 벌금이므로), 그 외 참가 확정자만 노출
+      var refBtn = (paid && !noRefund)
         ? '<span class="pill '+(refunded?'o':'x')+'" style="cursor:pointer;margin-left:4px;" onclick="toggleRefunded(\''+ek+'\')">'+(refunded?'환급완료':'환급대기')+'</span>'
         : '';
 
